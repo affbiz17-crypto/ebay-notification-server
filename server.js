@@ -20,7 +20,9 @@ app.post("/api/ebay/account-deletion", (req, res) => {
   });
 });
 
-const PORT = process.env.PORT || 10000;
+const PORT = process.env.PORT || 10000; 
+const verificationToken =
+  "rulz17-delete-token-secure-2026-render";
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
