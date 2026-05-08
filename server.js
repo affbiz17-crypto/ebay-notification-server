@@ -2,11 +2,25 @@ const express = require("express");
 
 const app = express();
 
+app.use(express.json());
+
 app.get("/", (req, res) => {
-  res.send("eBay notification server is running");
+  res.send("Server is running");
 });
 
-const PORT = process.env.PORT || 3000;
+app.get("/api/ebay/account-deletion", (req, res) => {
+  res.send("eBay account deletion endpoint active");
+});
+
+app.post("/api/ebay/account-deletion", (req, res) => {
+  console.log("Deletion notification:", req.body);
+
+  res.status(200).json({
+    received: true
+  });
+});
+
+const PORT = process.env.PORT || 10000;
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
