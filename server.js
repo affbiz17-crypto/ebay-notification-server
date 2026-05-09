@@ -1,4 +1,4 @@
-import admin from "firebase-admin"; 
+//import admin from "firebase-admin"; 
 
 
 import express from "express";
@@ -6,13 +6,13 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+//const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
-});
+//admin.initializeApp({
+  //credential: admin.credential.cert(serviceAccount)
+//});
 
-const db = admin.firestore();
+//const db = admin.firestore();
 
 const app = express();
 
@@ -79,15 +79,15 @@ app.get("/auth/ebay/callback", async (req, res) => {
 
 const data = await response.json();
 
-if (db) {
-  await db.collection("ebayStores").add({
-    connectedAt: new Date(),
-    accessToken: data.access_token,
-    refreshToken: data.refresh_token,
-    expiresIn: data.expires_in,
-    refreshTokenExpiresIn: data.refresh_token_expires_in
-  });
-}
+//if (db) {
+  //await db.collection("ebayStores").add({
+   // connectedAt: new Date(),
+   // accessToken: data.access_token,
+   // refreshToken: data.refresh_token,
+   // expiresIn: data.expires_in,
+   // refreshTokenExpiresIn: data.refresh_token_expires_in
+  //});
+//}
 
   console.log("eBay token response:", data);
 
