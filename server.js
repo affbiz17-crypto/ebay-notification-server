@@ -5,6 +5,8 @@ dotenv.config();
 
 const app = express();
 
+const EBAY_TOKEN_URL = "https://api.ebay.com/identity/v1/oauth2/token";
+
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
@@ -37,14 +39,39 @@ app.get("/auth/ebay/login", (req, res) => {
 });
 
 // eBay callback route
-app.get("/auth/ebay/callback", (req, res) => {
+app.get("/auth/ebay/callback", async (req, res) => {
   const code = req.query.code;
 
   if (!code) {
     return res.send("No authorization code received.");
   }
 
-  res.send("Store successfully connected ✅");
+  const credentials = Buffer.from(
+    `${process.env.EBAY_CLIENT_ID}:${process.env.EBAY_CLIENT_SECRET}`
+  ).toString("base64");
+
+  const response = await fetch(EBAY_TOKEN_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Authorization: `Basic ${credentials}`
+    },
+    body: new URLSearchParams({
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: process.env.EBAY_RUNAME
+    })
+  });
+
+  const data = await response.json();
+
+  console.log("eBay token response:", data);
+
+  if (!response.ok) {
+    return res.status(400).json(data);
+  }
+
+  res.send("Store connected and token received successfully ✅");
 });
 
 // Start server
