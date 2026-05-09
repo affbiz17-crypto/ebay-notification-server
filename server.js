@@ -16,6 +16,9 @@ app.get("/", (req, res) => {
   res.send("eBay notification server is running ✅");
 });
 
+app.get("/connect/ebay", (req, res) => {
+  res.redirect("/auth/ebay/login");
+});
 // eBay login route
 app.get("/auth/ebay/login", (req, res) => {
   const scopes = [
