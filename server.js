@@ -35,6 +35,18 @@ app.post("/api/ebay/account-deletion", (req, res) => {
 
 const PORT = process.env.PORT || 10000;
 
+app.get("/auth/ebay/callback", (req, res) => {
+  const code = req.query.code;
+
+  console.log("eBay auth code:", code);
+
+  res.send(`
+    <h1>eBay Connected</h1>
+    <p>Authorization code received.</p>
+    <p>You can close this page.</p>
+  `);
+});
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
