@@ -59,7 +59,17 @@ app.get("/auth/ebay/callback", async (req, res) => {
   if (!code) {
     return res.send("No authorization code received.");
   }
+const userResponse = await fetch("https://apiz.ebay.com/commerce/identity/v1/user/", {
+  method: "GET",
+  headers: {
+    Authorization: `Bearer ${data.access_token}`,
+    "Content-Type": "application/json"
+  }
+});
 
+const userData = await userResponse.json();
+
+console.log("eBay user info:", userData);
   const credentials = Buffer.from(
     `${process.env.EBAY_CLIENT_ID}:${process.env.EBAY_CLIENT_SECRET}`
   ).toString("base64");
@@ -88,7 +98,18 @@ const data = await response.json();
    // refreshTokenExpiresIn: data.refresh_token_expires_in
   //});
 //}
+await db.collection("ebayStores").add({
+  connectedAt: new Date(),
 
+  ebayUserId: userData.userId || null,
+  username: userData.username || null,
+  email: userData.email || null,
+
+  accessToken: data.access_token,
+  refreshToken: data.refresh_token,
+  accessTokenExpiresIn: data.expires_in,
+  refreshTokenExpiresIn: data.refresh_token_expires_in
+});
   console.log("eBay token response:", data);
 
   if (!response.ok) {
