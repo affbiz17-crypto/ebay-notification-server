@@ -39,5 +39,33 @@ app.get("/auth/ebay/callback", (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`); 
+
+  app.get("/auth/ebay/login", (req, res) => {
+  const scopes = [
+    "https://api.ebay.com/oauth/api_scope",
+    "https://api.ebay.com/oauth/api_scope/sell.inventory",
+    "https://api.ebay.com/oauth/api_scope/sell.fulfillment",
+    "https://api.ebay.com/oauth/api_scope/sell.account",
+    "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly"
+  ].join(" ");
+
+  const ebayAuthUrl =
+    "https://auth.ebay.com/oauth2/authorize" +
+    `?client_id=${process.env.EBAY_CLIENT_ID}` +
+    `&response_type=code` +
+    `&redirect_uri=${process.env.EBAY_RUNAME}` +
+    `&scope=${encodeURIComponent(scopes)}`;
+
+  res.redirect(ebayAuthUrl);
+});
+  app.get("/auth/ebay/callback", (req, res) => {
+  const code = req.query.code;
+
+  if (!code) {
+    return res.send("No authorization code received.");
+  }
+
+  res.send("Store successfully connected. Authorization code received.");
+});
 });
