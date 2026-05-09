@@ -40,7 +40,7 @@ app.get("/connect/ebay", (req, res) => {
 });
 
 // STEP 2: eBay sends user back here
-app.get("https://ebay-notifcation-server.onrender.com/auth/ebay/callback", async (req, res) => {
+app.get("/auth/ebay/callback", async (req, res) => {
   const { code, error, error_description } = req.query;
 
   if (error) {
@@ -91,10 +91,4 @@ app.get("https://ebay-notifcation-server.onrender.com/auth/ebay/callback", async
     console.error("OAuth callback error:", err);
     res.status(500).send("Server error during eBay OAuth.");
   }
-});
-
-const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
 });
