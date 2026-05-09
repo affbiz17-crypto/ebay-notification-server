@@ -1,28 +1,30 @@
-//import admin from "firebase-admin"; 
-
-
 import express from "express";
 import dotenv from "dotenv";
+import admin from "firebase-admin";
 
 dotenv.config();
 
-//const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-
-//admin.initializeApp({
-  //credential: admin.credential.cert(serviceAccount)
-//});
-
-//const db = admin.firestore();
-
 const app = express();
-
-const EBAY_TOKEN_URL = "https://api.ebay.com/identity/v1/oauth2/token";
-
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
+const EBAY_TOKEN_URL = "https://api.ebay.com/identity/v1/oauth2/token";
 
-// Home route
+let db = null;
+
+if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount)
+  });
+
+  db = admin.firestore();
+  console.log("Firebase connected ✅");
+} else {
+  console.log("Firebase not configured yet.");
+}
+
 app.get("/", (req, res) => {
   res.send("eBay notification server is running ✅");
 });
@@ -30,7 +32,7 @@ app.get("/", (req, res) => {
 app.get("/connect/ebay", (req, res) => {
   res.redirect("/auth/ebay/login");
 });
-// eBay login route
+
 app.get("/auth/ebay/login", (req, res) => {
   const scopes = [
     "https://api.ebay.com/oauth/api_scope",
@@ -52,74 +54,80 @@ app.get("/auth/ebay/login", (req, res) => {
   res.redirect(authUrl);
 });
 
-// eBay callback route
 app.get("/auth/ebay/callback", async (req, res) => {
-  const code = req.query.code;
+  try {
+    const code = req.query.code;
 
-  if (!code) {
-    return res.send("No authorization code received.");
-  }
-const userResponse = await fetch("https://apiz.ebay.com/commerce/identity/v1/user/", {
-  method: "GET",
-  headers: {
-    Authorization: `Bearer ${data.access_token}`,
-    "Content-Type": "application/json"
+    if (!code) {
+      return res.send("No authorization code received.");
+    }
+
+    const credentials = Buffer.from(
+      `${process.env.EBAY_CLIENT_ID}:${process.env.EBAY_CLIENT_SECRET}`
+    ).toString("base64");
+
+    const response = await fetch(EBAY_TOKEN_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Basic ${credentials}`
+      },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        code,
+        redirect_uri: process.env.EBAY_RUNAME
+      })
+    });
+
+    const data = await response.json();
+
+    console.log("eBay token response:", data);
+
+    if (!response.ok) {
+      return res.status(400).json(data);
+    }
+
+    const userResponse = await fetch(
+      "https://apiz.ebay.com/commerce/identity/v1/user/",
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${data.access_token}`,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+
+    const userData = await userResponse.json();
+
+    console.log("eBay user info:", userData);
+
+    if (db) {
+      await db.collection("ebayStores").add({
+        connectedAt: new Date(),
+
+        ebayUserId: userData.userId || null,
+        username: userData.username || null,
+        email: userData.email || null,
+
+        accessToken: data.access_token,
+        refreshToken: data.refresh_token,
+        accessTokenExpiresIn: data.expires_in,
+        refreshTokenExpiresIn: data.refresh_token_expires_in
+      });
+    }
+
+    res.send(`
+      Store connected successfully ✅<br><br>
+      Username: ${userData.username || "Unknown"}<br>
+      eBay User ID: ${userData.userId || "Unknown"}
+    `);
+  } catch (error) {
+    console.error("Callback error:", error);
+    res.status(500).send("Server error during eBay connection.");
   }
 });
 
-const userData = await userResponse.json();
-
-console.log("eBay user info:", userData);
-  const credentials = Buffer.from(
-    `${process.env.EBAY_CLIENT_ID}:${process.env.EBAY_CLIENT_SECRET}`
-  ).toString("base64");
-
-  const response = await fetch(EBAY_TOKEN_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      Authorization: `Basic ${credentials}`
-    },
-    body: new URLSearchParams({
-      grant_type: "authorization_code",
-      code,
-      redirect_uri: process.env.EBAY_RUNAME
-    })
-  });
-
-const data = await response.json();
-
-//if (db) {
-  //await db.collection("ebayStores").add({
-   // connectedAt: new Date(),
-   // accessToken: data.access_token,
-   // refreshToken: data.refresh_token,
-   // expiresIn: data.expires_in,
-   // refreshTokenExpiresIn: data.refresh_token_expires_in
-  //});
-//}
-await db.collection("ebayStores").add({
-  connectedAt: new Date(),
-
-  ebayUserId: userData.userId || null,
-  username: userData.username || null,
-  email: userData.email || null,
-
-  accessToken: data.access_token,
-  refreshToken: data.refresh_token,
-  accessTokenExpiresIn: data.expires_in,
-  refreshTokenExpiresIn: data.refresh_token_expires_in
-});
-  console.log("eBay token response:", data);
-
-  if (!response.ok) {
-    return res.status(400).json(data);
-  }
-
-  res.send("Store connected and token received successfully ✅");
-});
-
-// Start server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
