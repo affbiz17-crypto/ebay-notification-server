@@ -3,6 +3,10 @@ import express from "express";
 const app = express();
 app.use(express.json());
 
+app.get("/", (req, res) => {
+  res.send("eBay notification server is running ✅");
+});
+
 const PORT = process.env.PORT || 3000;
 
 app.get("/", (req, res) => {
