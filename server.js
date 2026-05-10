@@ -254,16 +254,24 @@ app.get("/api/inventory/:storeId", async (req, res) => {
       return res.status(404).send("Store not found.");
     }
 
-Authorization: `Bearer ${store.accessToken}`,
-    
     const store = storeDoc.data();
+
+    // Refresh the eBay access token first
+    const refreshedTokenData = await refreshEbayAccessToken(store.refreshToken);
+
+    // Save the new access token back to Firebase
+    await db.collection("ebayStores").doc(req.params.storeId).update({
+      accessToken: refreshedTokenData.access_token,
+      accessTokenExpiresIn: refreshedTokenData.expires_in,
+      lastTokenRefresh: new Date()
+    });
 
     const response = await fetch(
       "https://api.ebay.com/sell/inventory/v1/inventory_item",
       {
         method: "GET",
         headers: {
-          Authorization: `Bearer ${store.accessToken}`,
+          Authorization: `Bearer ${refreshedTokenData.access_token}`,
           "Content-Type": "application/json"
         }
       }
