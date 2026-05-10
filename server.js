@@ -271,9 +271,10 @@ app.get("/api/inventory/:storeId", async (req, res) => {
       {
         method: "GET",
         headers: {
-          Authorization: `Bearer ${refreshedTokenData.access_token}`,
-          "Content-Type": "application/json"
-        }
+  Authorization: `Bearer ${refreshedTokenData.access_token}`,
+  "Content-Type": "application/json",
+  "Accept-Language": "en-US"
+}
       }
     );
 
