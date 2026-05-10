@@ -161,108 +161,61 @@ stores.push({
 
 app.get("/dashboard", async (req, res) => {
   try {
-    if (!db) {
-      return res.send("Database not connected.");
-    }
+    if (!db) return res.send("Database not connected.");
 
     const snapshot = await db.collection("ebayStores").get();
-
     let storeCards = "";
 
     for (const doc of snapshot.docs) {
-  const store = doc.data();
+      const store = doc.data();
+      let orderCount = 0;
 
-  let orderCount = 0;
+      try {
+        const refreshedTokenData = await refreshEbayAccessToken(store.refreshToken);
 
-  try {
-    const refreshedTokenData = await refreshEbayAccessToken(store.refreshToken);
+        const ordersResponse = await fetch(
+          "https://api.ebay.com/sell/fulfillment/v1/order?limit=50",
+          {
+            headers: {
+              Authorization: `Bearer ${refreshedTokenData.access_token}`,
+              "Content-Type": "application/json",
+              "Accept-Language": "en-US"
+            }
+          }
+        );
 
-    await db.collection("ebayStores").doc(doc.id).update({
-      accessToken: refreshedTokenData.access_token,
-      accessTokenExpiresIn: refreshedTokenData.expires_in,
-      lastTokenRefresh: new Date()
-    });
-
-    const ordersResponse = await fetch(
-      "https://api.ebay.com/sell/fulfillment/v1/order?limit=50",
-      {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${refreshedTokenData.access_token}`,
-          "Content-Type": "application/json",
-          "Accept-Language": "en-US"
-        }
+        const ordersData = await ordersResponse.json();
+        orderCount = ordersData.total || 0;
+      } catch (err) {
+        console.error("Order count error:", err);
       }
-    );
 
-    const ordersData = await ordersResponse.json();
-    orderCount = ordersData.total || 0;
-
-  } catch (err) {
-    console.error("Order count error:", err);
-  }
-
-  storeCards += `
-    <div style="border:1px solid #ddd; border-radius:12px; padding:16px; margin-bottom:12px;">
-      <h2>${store.username || "Unknown Store"}</h2>
-      <p><strong>eBay User ID:</strong> ${store.ebayUserId || "Unknown"}</p>
-      <p><strong>Status:</strong> Connected ✅</p>
-      <p><strong>Recent Orders:</strong> ${orderCount}</p>
-
-      <p>
-        <a href="/orders/${doc.id}">
-          <button style="
-            padding:10px 14px;
-            border:none;
-            border-radius:8px;
-            background:#111827;
-            color:white;
-            cursor:pointer;
-          ">
-            View Orders
-          </button>
-        </a>
-      </p>
-    </div>
-  `;
-}
+      storeCards += `
         <div style="border:1px solid #ddd; border-radius:12px; padding:16px; margin-bottom:12px;">
           <h2>${store.username || "Unknown Store"}</h2>
           <p><strong>eBay User ID:</strong> ${store.ebayUserId || "Unknown"}</p>
-          <p><strong>Status:</strong> Connected ✅</p> 
-<p>
-  <a href="/orders/${doc.id}">
-    <button style="
-      padding:10px 14px;
-      border:none;
-      border-radius:8px;
-      background:#111827;
-      color:white;
-      cursor:pointer;
-    ">
-      View Orders
-    </button>
-  </a>
-</p>
-          
+          <p><strong>Status:</strong> Connected ✅</p>
+          <p><strong>Recent Orders:</strong> ${orderCount}</p>
+          <p>
+            <a href="/orders/${doc.id}">
+              <button style="padding:10px 14px; border:none; border-radius:8px; background:#111827; color:white; cursor:pointer;">
+                View Orders
+              </button>
+            </a>
+          </p>
         </div>
       `;
-    });
+    }
 
     res.send(`
       <html>
-        <head>
-          <title>eBay Store Dashboard</title>
-        </head>
         <body style="font-family: Arial; padding:20px; background:#f5f5f5;">
           <h1>Connected eBay Stores</h1>
-
           <a href="/connect/ebay">
             <button style="padding:12px 18px; border-radius:8px; border:none; background:#2563eb; color:white;">
               Connect Another eBay Store
             </button>
           </a>
-
           <div style="margin-top:20px;">
             ${storeCards || "<p>No stores connected yet.</p>"}
           </div>
