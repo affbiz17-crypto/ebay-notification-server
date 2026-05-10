@@ -100,17 +100,20 @@ app.get("/auth/ebay/callback", async (req, res) => {
     const userData = await userResponse.json();
 
     if (db) {
-      await db.collection("ebayStores").add({
-        connectedAt: new Date(),
-        ebayUserId: userData.userId || null,
-        username: userData.username || null,
-        email: userData.email || null,
-        accessToken: data.access_token,
-        refreshToken: data.refresh_token,
-        accessTokenExpiresIn: data.expires_in,
-        refreshTokenExpiresIn: data.refresh_token_expires_in
-      });
-    }
+  const storeId = userData.userId || userData.username;
+
+  await db.collection("ebayStores").doc(storeId).set({
+    connectedAt: new Date(),
+    lastConnectedAt: new Date(),
+    ebayUserId: userData.userId || null,
+    username: userData.username || null,
+    email: userData.email || null,
+    accessToken: data.access_token,
+    refreshToken: data.refresh_token,
+    accessTokenExpiresIn: data.expires_in,
+    refreshTokenExpiresIn: data.refresh_token_expires_in
+  }, { merge: true });
+}
 
     res.send(`
       Store connected successfully ✅<br><br>
