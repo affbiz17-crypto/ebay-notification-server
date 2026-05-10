@@ -176,7 +176,22 @@ app.get("/dashboard", async (req, res) => {
         <div style="border:1px solid #ddd; border-radius:12px; padding:16px; margin-bottom:12px;">
           <h2>${store.username || "Unknown Store"}</h2>
           <p><strong>eBay User ID:</strong> ${store.ebayUserId || "Unknown"}</p>
-          <p><strong>Status:</strong> Connected ✅</p>
+          <p><strong>Status:</strong> Connected ✅</p> 
+<p>
+  <a href="/orders/${doc.id}">
+    <button style="
+      padding:10px 14px;
+      border:none;
+      border-radius:8px;
+      background:#111827;
+      color:white;
+      cursor:pointer;
+    ">
+      View Orders
+    </button>
+  </a>
+</p>
+          
         </div>
       `;
     });
