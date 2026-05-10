@@ -8,6 +8,7 @@ const app = express();
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(express.static("public"));
 
 const PORT = process.env.PORT || 3000;
 const EBAY_TOKEN_URL = "https://api.ebay.com/identity/v1/oauth2/token";
@@ -292,7 +293,9 @@ function shell({ title, key, content, metaRefresh = false }) {
     <html>
       <head>
         <title>${title}</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="viewport" content="width=device-width, initial-scale=1"> 
+        <link rel="manifest" href="/manifest.json">
+        <meta name="theme-color" content="#111827">
         ${metaRefresh ? '<meta http-equiv="refresh" content="60">' : ''}
         ${baseStyles}
       </head>
