@@ -676,7 +676,35 @@ app.get("/all-orders", requireLogin, async (req, res) => {
             </button>
           </a>
 
-          ${ordersHtml || "<p>No orders found.</p>"}
+          ${ordersHtml || "<p>No orders found.</p>"} 
+                    <div style="margin-top:20px;">
+            ${storeCards || "<p>No stores connected yet.</p>"}
+          </div>
+
+          <script>
+            const currentOrderCount = ${totalRecentOrders};
+            const previousOrderCount = Number(localStorage.getItem("previousOrderCount") || 0);
+
+            if ("Notification" in window && Notification.permission !== "granted") {
+              Notification.requestPermission();
+            }
+
+            if (previousOrderCount > 0 && currentOrderCount > previousOrderCount) {
+              const newOrders = currentOrderCount - previousOrderCount;
+
+              if ("Notification" in window && Notification.permission === "granted") {
+                new Notification("New eBay Order!", {
+                  body: newOrders + " new order(s) received."
+                });
+              }
+
+              const audio = new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg");
+              audio.play().catch(() => {});
+            }
+
+            localStorage.setItem("previousOrderCount", currentOrderCount);
+          </script>
+        </body>
         </body>
       </html>
     `);
