@@ -306,7 +306,8 @@ function shell({ title, key, content, metaRefresh = false }) {
               <a href="/all-orders?key=${key || ''}">All Orders</a>
               <a href="/shipping?key=${key || ''}">Shipping Center</a>
               <a href="/packing?key=${key || ''}">Packing Queue</a>
-              <a href="/packed-orders?key=${key || ''}">Packed Orders</a>
+              <a href="/packed-orders?key=${key || ''}">Packed Orders</a> 
+              <a href="/profit?key=${key || ''}">Profit Center</a>
               <a href="/connect/ebay">Connect Store</a>
               <a href="/login">Login</a>
             </nav>
@@ -1875,6 +1876,115 @@ app.get("/api/dashboard-stats", requireLogin, async (req, res) => {
   } catch (error) {
     console.error("Dashboard stats error:", error);
     res.status(500).json({ error: "Failed to load dashboard stats." });
+  }
+});
+
+app.get("/profit", requireLogin, async (req, res) => {
+  try {
+    if (!db) return res.send("Database not connected.");
+
+    const feeRate = Number(req.query.feeRate || 13.25) / 100;
+    const shippingPerOrder = Number(req.query.shipping || 8);
+
+    const snapshot = await db.collection("ebayStores").get();
+
+    let totalOrders = 0;
+    let grossSales = 0;
+
+    for (const doc of snapshot.docs) {
+      const store = doc.data();
+      const refreshedTokenData = await refreshEbayAccessToken(store.refreshToken);
+
+      const response = await fetch(
+        "https://api.ebay.com/sell/fulfillment/v1/order?limit=50",
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${refreshedTokenData.access_token}`,
+            "Content-Type": "application/json",
+            "Accept-Language": "en-US"
+          }
+        }
+      );
+
+      const data = await response.json();
+
+      if (data.orders) {
+        data.orders.forEach(order => {
+          totalOrders += 1;
+          grossSales += Number(order.pricingSummary?.total?.value || 0);
+        });
+      }
+    }
+
+    const estimatedFees = grossSales * feeRate;
+    const estimatedShipping = totalOrders * shippingPerOrder;
+    const estimatedNetProfit = grossSales - estimatedFees - estimatedShipping;
+    const profitMargin =
+      grossSales > 0 ? (estimatedNetProfit / grossSales) * 100 : 0;
+
+    const content = `
+      <div class="topbar">
+        <div>
+          <h1>Profit Center</h1>
+          <div class="muted">Estimated profit using fee and shipping assumptions.</div>
+        </div>
+        <a class="btn btn-dark" href="/dashboard?key=${req.query.key}">Back to Dashboard</a>
+      </div>
+
+      <form method="GET" action="/profit" class="card" style="margin-bottom:20px;">
+        <input type="hidden" name="key" value="${req.query.key}">
+
+        <label>Estimated eBay Fee %</label>
+        <input name="feeRate" value="${req.query.feeRate || 13.25}" placeholder="13.25">
+
+        <label>Estimated Shipping Cost Per Order</label>
+        <input name="shipping" value="${req.query.shipping || 8}" placeholder="8">
+
+        <button type="submit">Recalculate</button>
+      </form>
+
+      <div class="grid">
+        <div class="card">
+          <div class="metric-label">Orders Analyzed</div>
+          <div class="metric-value">${totalOrders}</div>
+        </div>
+
+        <div class="card">
+          <div class="metric-label">Gross Sales</div>
+          <div class="metric-value">$${grossSales.toFixed(2)}</div>
+        </div>
+
+        <div class="card">
+          <div class="metric-label">Estimated Fees</div>
+          <div class="metric-value">$${estimatedFees.toFixed(2)}</div>
+        </div>
+
+        <div class="card">
+          <div class="metric-label">Estimated Shipping</div>
+          <div class="metric-value">$${estimatedShipping.toFixed(2)}</div>
+        </div>
+
+        <div class="card">
+          <div class="metric-label">Estimated Net</div>
+          <div class="metric-value">$${estimatedNetProfit.toFixed(2)}</div>
+        </div>
+      </div>
+
+      <div class="card section">
+        <h2>Profit Margin</h2>
+        <div class="metric-value">${profitMargin.toFixed(1)}%</div>
+        <p class="muted">
+          Formula: Gross Sales - Estimated Fees - Estimated Shipping.
+          Product cost tracking can be added next by SKU.
+        </p>
+      </div>
+    `;
+
+    res.send(shell({ title: "Profit Center", key: req.query.key, content }));
+  } catch (error) {
+    console.error("Profit center error:", error);
+    res.status(500).send("Failed to load profit center.");
   }
 });
 
