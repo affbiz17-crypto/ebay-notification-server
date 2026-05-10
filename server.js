@@ -207,6 +207,41 @@ app.get("/dashboard", async (req, res) => {
   }
 });
 
+app.get("/api/inventory/:storeId", async (req, res) => {
+  try {
+    if (!db) {
+      return res.status(500).send("Database not connected.");
+    }
+
+    const storeDoc = await db.collection("ebayStores").doc(req.params.storeId).get();
+
+    if (!storeDoc.exists) {
+      return res.status(404).send("Store not found.");
+    }
+
+    const store = storeDoc.data();
+
+    const response = await fetch(
+      "https://api.ebay.com/sell/inventory/v1/inventory_item",
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${store.accessToken}`,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+
+    const data = await response.json();
+
+    res.json(data);
+
+  } catch (error) {
+    console.error("Inventory error:", error);
+    res.status(500).send("Failed to fetch inventory.");
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
