@@ -165,7 +165,9 @@ app.get("/dashboard", async (req, res) => {
 
     const snapshot = await db.collection("ebayStores").get();
     let storeCards = "";
-
+    let totalRecentOrders = 0;
+    let totalAwaitingShipment = 0;
+    
     for (const doc of snapshot.docs) {
       const store = doc.data();
       let orderCount = 0;
@@ -185,7 +187,15 @@ app.get("/dashboard", async (req, res) => {
         );
 
         const ordersData = await ordersResponse.json();
-        orderCount = ordersData.total || 0;
+        orderCount = ordersData.total || 0; 
+totalRecentOrders += orderCount;
+
+if (ordersData.orders) {
+  totalAwaitingShipment += ordersData.orders.filter(order =>
+    order.orderFulfillmentStatus === "NOT_STARTED"
+  ).length;
+}
+        
       } catch (err) {
         console.error("Order count error:", err);
       }
@@ -224,7 +234,18 @@ app.get("/dashboard", async (req, res) => {
     res.send(`
       <html>
         <body style="font-family: Arial; padding:20px; background:#f5f5f5;">
-          <h1>Connected eBay Stores</h1>
+          <h1>Connected eBay Stores</h1> 
+          <div style="display:flex; gap:16px; margin:20px 0; flex-wrap:wrap;">
+  <div style="background:white; padding:18px; border-radius:12px; border:1px solid #ddd; min-width:180px;">
+    <h3>Total Recent Orders</h3>
+    <p style="font-size:28px; font-weight:bold;">${totalRecentOrders}</p>
+  </div>
+
+  <div style="background:white; padding:18px; border-radius:12px; border:1px solid #ddd; min-width:180px;">
+    <h3>Awaiting Shipment</h3>
+    <p style="font-size:28px; font-weight:bold;">${totalAwaitingShipment}</p>
+  </div>
+</div>
           <a href="/connect/ebay">
             <button style="padding:12px 18px; border-radius:8px; border:none; background:#2563eb; color:white;">
               Connect Another eBay Store
