@@ -2120,6 +2120,215 @@ app.post("/costs", requireLogin, async (req, res) => {
     console.error("Save cost error:", error);
     res.status(500).send("Failed to save SKU cost.");
   }
+}); 
+
+app.get("/profit-orders", requireLogin, async (req, res) => {
+  try {
+    if (!db) return res.send("Database not connected.");
+
+    const feeRate = 0.1325;
+
+    const snapshot = await db.collection("ebayStores").get();
+
+    let profitCards = [];
+    let totalNetProfit = 0;
+
+    for (const doc of snapshot.docs) {
+      const store = doc.data();
+
+      const refreshedTokenData = await refreshEbayAccessToken(store.refreshToken);
+
+      const response = await fetch(
+        "https://api.ebay.com/sell/fulfillment/v1/order?limit=25",
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${refreshedTokenData.access_token}`,
+            "Content-Type": "application/json",
+            "Accept-Language": "en-US"
+          }
+        }
+      );
+
+      const data = await response.json();
+
+      if (!data.orders) continue;
+
+      for (const order of data.orders) {
+        const saleAmount = Number(
+          order.pricingSummary?.total?.value || 0
+        );
+
+        const ebayFee = saleAmount * feeRate;
+
+        let productCost = 0;
+        let shippingCost = 0;
+        let matchedBy = "No Match";
+
+        if (order.lineItems) {
+          for (const item of order.lineItems) {
+            const sku = item.sku?.trim().toUpperCase();
+            const title = item.title?.trim().toUpperCase();
+
+            let costDoc = null;
+
+            if (sku) {
+              const skuDoc = await db
+                .collection("productCosts")
+                .doc(sku)
+                .get();
+
+              if (skuDoc.exists) {
+                costDoc = skuDoc.data();
+                matchedBy = "SKU";
+              }
+            }
+
+            if (!costDoc && title) {
+              const titleSnapshot = await db
+                .collection("productCosts")
+                .where("matchType", "==", "title")
+                .get();
+
+              titleSnapshot.forEach(doc => {
+                const data = doc.data();
+
+                if (
+                  title.includes(data.sku?.toUpperCase())
+                ) {
+                  costDoc = data;
+                  matchedBy = "Title";
+                }
+              });
+            }
+
+            if (costDoc) {
+              productCost += Number(costDoc.productCost || 0);
+              shippingCost += Number(costDoc.shippingCost || 0);
+            }
+          }
+        }
+
+        const netProfit =
+          saleAmount - ebayFee - productCost - shippingCost;
+
+        totalNetProfit += netProfit;
+
+        const margin =
+          saleAmount > 0
+            ? ((netProfit / saleAmount) * 100).toFixed(1)
+            : "0";
+
+        const marginColor =
+          netProfit > 0
+            ? "#16a34a"
+            : "#dc2626";
+
+        profitCards.push(`
+          <div class="card section">
+            <div class="topbar">
+              <div>
+                <h2>Order #${order.orderId}</h2>
+                <div class="muted">
+                  ${store.username || "Unknown Store"}
+                </div>
+              </div>
+
+              <div style="
+                background:${marginColor};
+                color:white;
+                padding:10px 14px;
+                border-radius:999px;
+                font-weight:bold;
+              ">
+                ${margin}%
+              </div>
+            </div>
+
+            <p><strong>Buyer:</strong>
+              ${order.buyer?.username || "Unknown"}
+            </p>
+
+            <p><strong>Sale Amount:</strong>
+              $${saleAmount.toFixed(2)}
+            </p>
+
+            <p><strong>Estimated eBay Fee:</strong>
+              $${ebayFee.toFixed(2)}
+            </p>
+
+            <p><strong>Product Cost:</strong>
+              $${productCost.toFixed(2)}
+            </p>
+
+            <p><strong>Shipping Cost:</strong>
+              $${shippingCost.toFixed(2)}
+            </p>
+
+            <p><strong>Net Profit:</strong>
+              <span style="color:${marginColor}; font-weight:bold;">
+                $${netProfit.toFixed(2)}
+              </span>
+            </p>
+
+            <p><strong>Matched By:</strong>
+              ${matchedBy}
+            </p>
+          </div>
+        `);
+      }
+    }
+
+    profitCards.sort((a, b) => b.netProfit - a.netProfit);
+
+    const content = `
+      <div class="topbar">
+        <div>
+          <h1>Profit Orders</h1>
+          <div class="muted">
+            Real estimated profit by order.
+          </div>
+        </div>
+
+        <a class="btn btn-dark"
+           href="/dashboard?key=${req.query.key}">
+           Back to Dashboard
+        </a>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <div class="metric-label">Estimated Total Net Profit</div>
+          <div class="metric-value">
+            $${totalNetProfit.toFixed(2)}
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="metric-label">Orders Analyzed</div>
+          <div class="metric-value">
+            ${profitCards.length}
+          </div>
+        </div>
+      </div>
+
+      <div class="orders-list">
+        ${profitCards.join("") || "<p>No orders found.</p>"}
+      </div>
+    `;
+
+    res.send(
+      shell({
+        title: "Profit Orders",
+        key: req.query.key,
+        content
+      })
+    );
+
+  } catch (error) {
+    console.error("Profit orders error:", error);
+    res.status(500).send("Failed to load profit orders.");
+  }
 });
 
 app.listen(PORT, () => {
