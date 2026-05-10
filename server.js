@@ -288,6 +288,48 @@ app.get("/api/inventory/:storeId", async (req, res) => {
   }
 });
 
+app.get("/api/orders/:storeId", async (req, res) => {
+  try {
+    if (!db) {
+      return res.status(500).send("Database not connected.");
+    }
+
+    const storeDoc = await db.collection("ebayStores").doc(req.params.storeId).get();
+
+    if (!storeDoc.exists) {
+      return res.status(404).send("Store not found.");
+    }
+
+    const store = storeDoc.data();
+    const refreshedTokenData = await refreshEbayAccessToken(store.refreshToken);
+
+    await db.collection("ebayStores").doc(req.params.storeId).update({
+      accessToken: refreshedTokenData.access_token,
+      accessTokenExpiresIn: refreshedTokenData.expires_in,
+      lastTokenRefresh: new Date()
+    });
+
+    const response = await fetch(
+      "https://api.ebay.com/sell/fulfillment/v1/order?limit=10",
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${refreshedTokenData.access_token}`,
+          "Content-Type": "application/json",
+          "Accept-Language": "en-US"
+        }
+      }
+    );
+
+    const data = await response.json();
+    res.json(data);
+
+  } catch (error) {
+    console.error("Orders error:", error);
+    res.status(500).send("Failed to fetch orders.");
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
