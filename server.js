@@ -128,6 +128,31 @@ app.get("/auth/ebay/callback", async (req, res) => {
   }
 });
 
+app.get("/api/stores", async (req, res) => {
+  try {
+    if (!db) {
+      return res.status(500).send("Database not connected.");
+    }
+
+    const snapshot = await db.collection("ebayStores").get();
+
+    const stores = [];
+
+    snapshot.forEach(doc => {
+      stores.push({
+        id: doc.id,
+        ...doc.data()
+      });
+    });
+
+    res.json(stores);
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).send("Failed to fetch stores.");
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
