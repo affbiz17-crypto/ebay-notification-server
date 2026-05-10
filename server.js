@@ -1228,15 +1228,7 @@ app.post("/ship/:storeId/:orderId", requireLogin, async (req, res) => {
   try {
     if (!db) return res.status(500).send("Database not connected.");
 
-    const {
-  sku,
-  productCost,
-  shippingCost,
-  matchType: matchType || "sku",
-supplier: supplier || "",
-notes: notes || "",
-  matchType
-} = req.body;
+const { carrier, trackingNumber } = req.body;
 
     const storeDoc = await db.collection("ebayStores").doc(req.params.storeId).get();
 
@@ -2080,7 +2072,7 @@ app.get("/costs", requireLogin, async (req, res) => {
             </thead>
 
             <tbody>
-              ${rowsHtml || "<tr><td colspan='5' style='padding:10px;'>No SKU costs saved yet.</td></tr>"}
+              ${rowsHtml || "<tr><td colspan='6' style='padding:10px;'>No SKU costs saved yet.</td></tr>"}
             </tbody>
           </table>
         </div>
@@ -2091,6 +2083,41 @@ app.get("/costs", requireLogin, async (req, res) => {
   } catch (error) {
     console.error("Costs page error:", error);
     res.status(500).send("Failed to load costs page.");
+  }
+}); 
+
+app.post("/costs", requireLogin, async (req, res) => {
+  try {
+    if (!db) return res.send("Database not connected.");
+
+    const {
+      sku,
+      productCost,
+      shippingCost,
+      supplier,
+      notes,
+      matchType
+    } = req.body;
+
+    const cleanSku = sku.trim().toUpperCase();
+
+    await db.collection("productCosts").doc(cleanSku).set(
+      {
+        sku: cleanSku,
+        productCost: Number(productCost || 0),
+        shippingCost: Number(shippingCost || 0),
+        matchType: matchType || "sku",
+        supplier: supplier || "",
+        notes: notes || "",
+        updatedAt: new Date()
+      },
+      { merge: true }
+    );
+
+    res.redirect(`/costs?key=${req.query.key}`);
+  } catch (error) {
+    console.error("Save cost error:", error);
+    res.status(500).send("Failed to save SKU cost.");
   }
 });
 
