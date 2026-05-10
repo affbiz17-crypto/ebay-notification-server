@@ -139,10 +139,16 @@ app.get("/api/stores", async (req, res) => {
     const stores = [];
 
     snapshot.forEach(doc => {
-      stores.push({
-        id: doc.id,
-        ...doc.data()
-      });
+      const store = doc.data();
+
+stores.push({
+  id: doc.id,
+  username: store.username,
+  ebayUserId: store.ebayUserId,
+  email: store.email,
+  connectedAt: store.connectedAt,
+  connected: true
+});
     });
 
     res.json(stores);
