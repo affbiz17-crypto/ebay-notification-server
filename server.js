@@ -646,7 +646,8 @@ app.get("/dashboard", requireLogin, async (req, res) => {
           <p><span class="status-pill" style="background:#16a34a;">CONNECTED</span></p>
           <p><strong>Recent Orders:</strong> ${orderCount}</p>
           <div class="button-row">
-            <a class="btn btn-dark" href="/orders/${doc.id}?key=${req.query.key}">View Orders</a>
+            <a class="btn btn-dark" href="/orders/${doc.id}?key=${req.query.key}">View Orders</a> 
+            <a class="btn btn-purple" href="/inventory/${doc.id}?key=${req.query.key}">Inventory</a>
             <a class="btn btn-red" href="/delete-store/${doc.id}?key=${req.query.key}">Remove</a>
           </div>
         </div>
@@ -967,6 +968,79 @@ app.get("/all-orders", requireLogin, async (req, res) => {
   } catch (error) {
     console.error("All orders error:", error);
     res.status(500).send("Failed to load all orders.");
+  }
+}); 
+
+app.get("/inventory/:storeId", requireLogin, async (req, res) => {
+  try {
+    if (!db) return res.status(500).send("Database not connected.");
+
+    const storeDoc = await db.collection("ebayStores").doc(req.params.storeId).get();
+
+    if (!storeDoc.exists) {
+      return res.status(404).send("Store not found.");
+    }
+
+    const store = storeDoc.data();
+    const refreshedTokenData = await refreshEbayAccessToken(store.refreshToken);
+
+    await db.collection("ebayStores").doc(req.params.storeId).update({
+      accessToken: refreshedTokenData.access_token,
+      accessTokenExpiresIn: refreshedTokenData.expires_in,
+      lastTokenRefresh: new Date()
+    });
+
+    const response = await fetch(
+      "https://api.ebay.com/sell/inventory/v1/inventory_item?limit=50",
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${refreshedTokenData.access_token}`,
+          "Content-Type": "application/json",
+          "Accept-Language": "en-US"
+        }
+      }
+    );
+
+    const data = await response.json();
+
+    let inventoryHtml = "";
+
+    if (data.inventoryItems && data.inventoryItems.length > 0) {
+      data.inventoryItems.forEach(item => {
+        inventoryHtml += `
+          <div class="order-card">
+            <h2>${item.sku || "No SKU"}</h2>
+            <p class="muted"><strong>Condition:</strong> ${item.condition || "Unknown"}</p>
+            <p><strong>Quantity:</strong> ${item.availability?.shipToLocationAvailability?.quantity ?? "Unknown"}</p>
+          </div>
+        `;
+      });
+    }
+
+    const content = `
+      <div class="topbar">
+        <div>
+          <h1>${store.username || "Store"} Inventory</h1>
+          <div class="muted">Inventory items pulled from eBay Inventory API.</div>
+        </div>
+        <a class="btn btn-dark" href="/dashboard?key=${req.query.key}">Back to Dashboard</a>
+      </div>
+
+      <div class="card">
+        <div class="metric-label">Inventory Items</div>
+        <div class="metric-value">${data.total || 0}</div>
+      </div>
+
+      <div class="orders-list">
+        ${inventoryHtml || "<p>No inventory items found through this API.</p>"}
+      </div>
+    `;
+
+    res.send(shell({ title: "Inventory Center", key: req.query.key, content }));
+  } catch (error) {
+    console.error("Inventory page error:", error);
+    res.status(500).send("Failed to load inventory.");
   }
 });
 
