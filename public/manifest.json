@@ -1,9 +1,10 @@
 {
   "name": "SixJays eBay Control Center",
-  "short_name": "SixJays",
-  "start_url": "/dashboard",
+  "short_name": "SixJays Seller",
+  "start_url": "/login",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#0f172a",
+  "background_color": "#070b14",
   "theme_color": "#111827",
   "orientation": "portrait",
   "icons": [
