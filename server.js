@@ -1228,7 +1228,15 @@ app.post("/ship/:storeId/:orderId", requireLogin, async (req, res) => {
   try {
     if (!db) return res.status(500).send("Database not connected.");
 
-    const { carrier, trackingNumber } = req.body;
+    const {
+  sku,
+  productCost,
+  shippingCost,
+  matchType: matchType || "sku",
+supplier: supplier || "",
+notes: notes || "",
+  matchType
+} = req.body;
 
     const storeDoc = await db.collection("ebayStores").doc(req.params.storeId).get();
 
@@ -2005,7 +2013,8 @@ app.get("/costs", requireLogin, async (req, res) => {
           <td>${item.sku || ""}</td>
           <td>$${Number(item.productCost || 0).toFixed(2)}</td>
           <td>$${Number(item.shippingCost || 0).toFixed(2)}</td>
-          <td>${item.supplier || ""}</td>
+<td>${item.matchType || "sku"}</td>
+<td>${item.supplier || ""}</td>
           <td>${item.notes || ""}</td>
         </tr>
       `;
@@ -2030,6 +2039,21 @@ app.get("/costs", requireLogin, async (req, res) => {
         <label>Shipping Cost</label>
         <input name="shippingCost" type="number" step="0.01" placeholder="8.00">
 
+<label>Match Type</label>
+
+<select name="matchType" style="
+  width:100%;
+  padding:14px;
+  border-radius:14px;
+  margin:14px 0;
+  background:#111827;
+  color:white;
+  border:1px solid rgba(148,163,184,.22);
+">
+  <option value="sku">SKU Match</option>
+  <option value="title">Title Match</option>
+</select>
+
         <label>Supplier</label>
         <input name="supplier" placeholder="Motor State, Summit, etc.">
 
@@ -2049,6 +2073,7 @@ app.get("/costs", requireLogin, async (req, res) => {
                 <th style="text-align:left; padding:10px; border-bottom:1px solid rgba(148,163,184,.22);">SKU</th>
                 <th style="text-align:left; padding:10px; border-bottom:1px solid rgba(148,163,184,.22);">Product Cost</th>
                 <th style="text-align:left; padding:10px; border-bottom:1px solid rgba(148,163,184,.22);">Shipping Cost</th>
+                  <th style="text-align:left; padding:10px; border-bottom:1px solid rgba(148,163,184,.22);">Match Type</th>
                 <th style="text-align:left; padding:10px; border-bottom:1px solid rgba(148,163,184,.22);">Supplier</th>
                 <th style="text-align:left; padding:10px; border-bottom:1px solid rgba(148,163,184,.22);">Notes</th>
               </tr>
