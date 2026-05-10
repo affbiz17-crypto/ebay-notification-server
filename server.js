@@ -229,7 +229,21 @@ app.get("/dashboard", async (req, res) => {
             <button style="padding:12px 18px; border-radius:8px; border:none; background:#2563eb; color:white;">
               Connect Another eBay Store
             </button>
-          </a>
+          </a> 
+<a href="/all-orders">
+  <button style="
+    padding:12px 18px;
+    border-radius:8px;
+    border:none;
+    background:#111827;
+    color:white;
+    margin-left:10px;
+    cursor:pointer;
+  ">
+    View All Orders
+  </button>
+</a>
+          
           <div style="margin-top:20px;">
             ${storeCards || "<p>No stores connected yet.</p>"}
           </div>
