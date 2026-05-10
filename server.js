@@ -1265,7 +1265,12 @@ app.get("/packing", requireLogin, async (req, res) => {
       }
     }
 
-    let packingHtml = "";
+    let packingHtml = `
+  <form method="POST" action="/bulk-packing-slips?key=${req.query.key}">
+    <button class="btn btn-purple" type="submit">
+      Print Selected Packing Slips
+    </button>
+`;
 
     for (const order of packingOrders) {
       const packDoc = await db.collection("packingQueue").doc(order.orderId).get();
@@ -1273,7 +1278,12 @@ app.get("/packing", requireLogin, async (req, res) => {
 
       packingHtml += `
         <div class="order-card">
-          <h2>Order #${order.orderId}</h2>
+          <h2>Order #${order.orderId}</h2> 
+
+          <label>
+  <input type="checkbox" name="orders" value="${order.storeId}|${order.orderId}" style="width:auto; margin-right:8px;">
+  Select for bulk print
+</label>
           <p class="muted"><strong>Store:</strong> ${order.storeName || "Unknown Store"}</p>
           <p class="muted"><strong>Buyer:</strong> ${order.buyer?.username || "Unknown"}</p>
           <p><strong>Total:</strong> ${order.pricingSummary?.total?.value || "0.00"} ${order.pricingSummary?.total?.currency || ""}</p>
@@ -1291,7 +1301,7 @@ app.get("/packing", requireLogin, async (req, res) => {
         </div>
       `;
     }
-
+packingHtml += `</form>`;
     const content = `
       <div class="topbar">
         <div>
@@ -1560,6 +1570,185 @@ app.get("/packing-slip/:storeId/:orderId", requireLogin, async (req, res) => {
   } catch (error) {
     console.error("Packing slip error:", error);
     res.status(500).send("Failed to load packing slip.");
+  }
+});
+
+app.post("/bulk-packing-slips", requireLogin, async (req, res) => {
+  try {
+    if (!db) return res.send("Database not connected.");
+
+    let selectedOrders = req.body.orders || [];
+
+    if (!Array.isArray(selectedOrders)) {
+      selectedOrders = [selectedOrders];
+    }
+
+    if (selectedOrders.length === 0) {
+      return res.send("No orders selected.");
+    }
+
+    let slipsHtml = "";
+
+    for (const value of selectedOrders) {
+      const [storeId, orderId] = value.split("|");
+
+      const storeDoc = await db.collection("ebayStores").doc(storeId).get();
+
+      if (!storeDoc.exists) continue;
+
+      const store = storeDoc.data();
+      const refreshedTokenData = await refreshEbayAccessToken(store.refreshToken);
+
+      const response = await fetch(
+        `https://api.ebay.com/sell/fulfillment/v1/order/${orderId}`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${refreshedTokenData.access_token}`,
+            "Content-Type": "application/json",
+            "Accept-Language": "en-US"
+          }
+        }
+      );
+
+      const order = await response.json();
+
+      if (!response.ok) continue;
+
+      const shipTo = order.fulfillmentStartInstructions?.[0]?.shippingStep?.shipTo || {};
+
+      let itemsHtml = "";
+
+      if (order.lineItems) {
+        order.lineItems.forEach(item => {
+          itemsHtml += `
+            <tr>
+              <td>${item.title || "Unknown Item"}</td>
+              <td>${item.sku || "No SKU"}</td>
+              <td>${item.quantity || 1}</td>
+              <td>${item.total?.value || "0.00"} ${item.total?.currency || ""}</td>
+            </tr>
+          `;
+        });
+      }
+
+      slipsHtml += `
+        <section class="slip">
+          <div class="top">
+            <div>
+              <h1>Packing Slip</h1>
+              <p><strong>Store:</strong> ${store.username || "Unknown Store"}</p>
+              <p><strong>Order:</strong> ${order.orderId}</p>
+              <p><strong>Created:</strong> ${order.creationDate}</p>
+            </div>
+          </div>
+
+          <hr>
+
+          <h2>Ship To</h2>
+          <p>
+            ${shipTo.fullName || ""}<br>
+            ${shipTo.contactAddress?.addressLine1 || ""}<br>
+            ${shipTo.contactAddress?.addressLine2 || ""}<br>
+            ${shipTo.contactAddress?.city || ""}, 
+            ${shipTo.contactAddress?.stateOrProvince || ""} 
+            ${shipTo.contactAddress?.postalCode || ""}<br>
+            ${shipTo.contactAddress?.countryCode || ""}
+          </p>
+
+          <h2>Items</h2>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>SKU</th>
+                <th>Qty</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itemsHtml || "<tr><td colspan='4'>No line items found.</td></tr>"}
+            </tbody>
+          </table>
+
+          <h2>Total</h2>
+          <p><strong>${order.pricingSummary?.total?.value || "0.00"} ${order.pricingSummary?.total?.currency || ""}</strong></p>
+        </section>
+      `;
+    }
+
+    res.send(`
+      <html>
+        <head>
+          <title>Bulk Packing Slips</title>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              color: #111;
+              background: white;
+              padding: 30px;
+            }
+
+            .no-print {
+              margin-bottom: 30px;
+            }
+
+            button {
+              padding: 12px 18px;
+              border: none;
+              background: #111827;
+              color: white;
+              border-radius: 8px;
+              cursor: pointer;
+            }
+
+            .slip {
+              page-break-after: always;
+              margin-bottom: 40px;
+            }
+
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-top: 20px;
+            }
+
+            th, td {
+              border: 1px solid #ccc;
+              padding: 10px;
+              text-align: left;
+            }
+
+            th {
+              background: #f3f4f6;
+            }
+
+            @media print {
+              .no-print {
+                display: none;
+              }
+
+              body {
+                padding: 0;
+              }
+            }
+          </style>
+        </head>
+
+        <body>
+          <div class="no-print">
+            <button onclick="window.print()">Print All Packing Slips</button>
+            <a href="/packing?key=${req.query.key}" style="margin-left:20px;">Back to Packing Queue</a>
+          </div>
+
+          ${slipsHtml}
+        </body>
+      </html>
+    `);
+  } catch (error) {
+    console.error("Bulk packing slips error:", error);
+    res.status(500).send("Failed to generate bulk packing slips.");
   }
 });
 
