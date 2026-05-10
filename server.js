@@ -305,6 +305,7 @@ function shell({ title, key, content, metaRefresh = false }) {
               <a href="/dashboard?key=${key || ''}">Dashboard</a>
               <a href="/all-orders?key=${key || ''}">All Orders</a>
               <a href="/shipping?key=${key || ''}">Shipping Center</a>
+              <a href="/packing?key=${key || ''}">Packing Queue</a>
               <a href="/connect/ebay">Connect Store</a>
               <a href="/login">Login</a>
             </nav>
@@ -1223,6 +1224,117 @@ app.post("/ship/:storeId/:orderId", requireLogin, async (req, res) => {
 
 app.post("/ship/:storeId/:orderId", requireLogin, async (req, res) => {
   // your existing POST ship code
+});
+
+app.get("/packing", requireLogin, async (req, res) => {
+  try {
+    if (!db) return res.send("Database not connected.");
+
+    const snapshot = await db.collection("ebayStores").get();
+    const packingOrders = [];
+
+    for (const doc of snapshot.docs) {
+      const store = doc.data();
+      const refreshedTokenData = await refreshEbayAccessToken(store.refreshToken);
+
+      const response = await fetch(
+        "https://api.ebay.com/sell/fulfillment/v1/order?limit=50",
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${refreshedTokenData.access_token}`,
+            "Content-Type": "application/json",
+            "Accept-Language": "en-US"
+          }
+        }
+      );
+
+      const data = await response.json();
+
+      if (data.orders) {
+        data.orders
+          .filter(order => order.orderFulfillmentStatus !== "FULFILLED")
+          .forEach(order => {
+            packingOrders.push({
+              storeId: doc.id,
+              storeName: store.username,
+              ...order
+            });
+          });
+      }
+    }
+
+    let packingHtml = "";
+
+    for (const order of packingOrders) {
+      const packDoc = await db.collection("packingQueue").doc(order.orderId).get();
+      const packStatus = packDoc.exists ? packDoc.data().status : "Ready to Pack";
+
+      packingHtml += `
+        <div class="order-card">
+          <h2>Order #${order.orderId}</h2>
+          <p class="muted"><strong>Store:</strong> ${order.storeName || "Unknown Store"}</p>
+          <p class="muted"><strong>Buyer:</strong> ${order.buyer?.username || "Unknown"}</p>
+          <p><strong>Total:</strong> ${order.pricingSummary?.total?.value || "0.00"} ${order.pricingSummary?.total?.currency || ""}</p>
+          <p><strong>Packing Status:</strong> <span class="status-pill" style="background:#7c3aed;">${packStatus}</span></p>
+
+          <a class="btn btn-green" href="/mark-packed/${order.orderId}?key=${req.query.key}">
+            Mark Packed
+          </a>
+
+          <a class="btn btn-dark" href="/ship/${order.storeId}/${order.orderId}?key=${req.query.key}">
+            Add Tracking
+          </a>
+        </div>
+      `;
+    }
+
+    const content = `
+      <div class="topbar">
+        <div>
+          <h1>Packing Queue</h1>
+          <div class="muted">Internal workflow before uploading tracking to eBay.</div>
+        </div>
+        <a class="btn btn-dark" href="/dashboard?key=${req.query.key}">Back to Dashboard</a>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <div class="metric-label">Orders in Packing Queue</div>
+          <div class="metric-value">${packingOrders.length}</div>
+        </div>
+      </div>
+
+      <div class="orders-list">
+        ${packingHtml || "<p>No orders currently need packing.</p>"}
+      </div>
+    `;
+
+    res.send(shell({ title: "Packing Queue", key: req.query.key, content, metaRefresh: true }));
+  } catch (error) {
+    console.error("Packing queue error:", error);
+    res.status(500).send("Failed to load packing queue.");
+  }
+});
+
+app.get("/mark-packed/:orderId", requireLogin, async (req, res) => {
+  try {
+    if (!db) return res.send("Database not connected.");
+
+    await db.collection("packingQueue").doc(req.params.orderId).set(
+      {
+        orderId: req.params.orderId,
+        status: "Packed",
+        packedAt: new Date()
+      },
+      { merge: true }
+    );
+
+    res.redirect(`/packing?key=${req.query.key}`);
+  } catch (error) {
+    console.error("Mark packed error:", error);
+    res.status(500).send("Failed to mark packed.");
+  }
 });
 
 app.listen(PORT, () => {
