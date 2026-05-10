@@ -304,6 +304,7 @@ function shell({ title, key, content, metaRefresh = false }) {
             <nav class="nav">
               <a href="/dashboard?key=${key || ''}">Dashboard</a>
               <a href="/all-orders?key=${key || ''}">All Orders</a>
+              <a href="/shipping?key=${key || ''}">Shipping Center</a>
               <a href="/connect/ebay">Connect Store</a>
               <a href="/login">Login</a>
             </nav>
@@ -1041,6 +1042,96 @@ app.get("/inventory/:storeId", requireLogin, async (req, res) => {
   } catch (error) {
     console.error("Inventory page error:", error);
     res.status(500).send("Failed to load inventory.");
+  }
+});
+
+app.get("/shipping", requireLogin, async (req, res) => {
+  try {
+    if (!db) return res.send("Database not connected.");
+
+    const snapshot = await db.collection("ebayStores").get();
+    const shippingOrders = [];
+
+    for (const doc of snapshot.docs) {
+      const store = doc.data();
+      const refreshedTokenData = await refreshEbayAccessToken(store.refreshToken);
+
+      await db.collection("ebayStores").doc(doc.id).update({
+        accessToken: refreshedTokenData.access_token,
+        accessTokenExpiresIn: refreshedTokenData.expires_in,
+        lastTokenRefresh: new Date()
+      });
+
+      const response = await fetch(
+        "https://api.ebay.com/sell/fulfillment/v1/order?limit=50",
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${refreshedTokenData.access_token}`,
+            "Content-Type": "application/json",
+            "Accept-Language": "en-US"
+          }
+        }
+      );
+
+      const data = await response.json();
+
+      if (data.orders) {
+        data.orders
+          .filter(order => order.orderFulfillmentStatus !== "FULFILLED")
+          .forEach(order => {
+            shippingOrders.push({
+              storeName: store.username,
+              ...order
+            });
+          });
+      }
+    }
+
+    shippingOrders.sort((a, b) => new Date(a.creationDate) - new Date(b.creationDate));
+
+    let shippingHtml = "";
+
+    shippingOrders.forEach(order => {
+      const statusColor = getStatusColor(order.orderFulfillmentStatus);
+
+      shippingHtml += `
+        <div class="order-card">
+          <h2>Order #${order.orderId}</h2>
+          <p class="muted"><strong>Store:</strong> ${order.storeName || "Unknown Store"}</p>
+          <p class="muted"><strong>Buyer:</strong> ${order.buyer?.username || "Unknown"}</p>
+          <p><strong>Total:</strong> ${order.pricingSummary?.total?.value || "0.00"} ${order.pricingSummary?.total?.currency || ""}</p>
+          <p><strong>Status:</strong> <span class="status-pill" style="background:${statusColor};">${order.orderFulfillmentStatus}</span></p>
+          <p class="muted"><strong>Created:</strong> ${order.creationDate}</p>
+        </div>
+      `;
+    });
+
+    const content = `
+      <div class="topbar">
+        <div>
+          <h1>Shipping Center</h1>
+          <div class="muted">Orders that still need fulfillment across all connected stores.</div>
+        </div>
+        <a class="btn btn-dark" href="/dashboard?key=${req.query.key}">Back to Dashboard</a>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <div class="metric-label">Orders Needing Shipment</div>
+          <div class="metric-value">${shippingOrders.length}</div>
+        </div>
+      </div>
+
+      <div class="orders-list">
+        ${shippingHtml || "<p>No orders currently need shipment.</p>"}
+      </div>
+    `;
+
+    res.send(shell({ title: "Shipping Center", key: req.query.key, content, metaRefresh: true }));
+  } catch (error) {
+    console.error("Shipping center error:", error);
+    res.status(500).send("Failed to load shipping center.");
   }
 });
 
