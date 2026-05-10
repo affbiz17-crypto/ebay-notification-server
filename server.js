@@ -395,7 +395,7 @@ app.get("/dashboard", requireLogin, async (req, res) => {
             </button>
           </a>
 
-          <a href="/all-orders?key=${req.query.key}">
+         <a href="/all-orders?key=${req.query.key}">
             <button style="padding:12px 18px; border-radius:8px; border:none; background:#111827; color:white; margin-left:10px; cursor:pointer;">
               View All Orders
             </button>
@@ -562,7 +562,7 @@ app.get("/orders/:storeId", async (req, res) => {
         <body style="font-family: Arial; padding:20px; background:#f3f4f6;">
           <h1>${store.username || "Store"} Orders</h1>
 
-          <a href="/dashboard">
+         <a href="/dashboard?key=${req.query.key}">
             <button style="padding:10px 16px; margin-bottom:20px;">
               Back to Dashboard
             </button>
@@ -708,8 +708,7 @@ app.get("/all-orders", requireLogin, async (req, res) => {
             localStorage.setItem("previousOrderCount", currentOrderCount);
           </script>
         </body>
-        </body>
-      </html>
+       </html>
     `);
   } catch (error) {
     console.error("All orders error:", error);
