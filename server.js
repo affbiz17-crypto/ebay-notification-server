@@ -1282,7 +1282,9 @@ app.get("/packing", requireLogin, async (req, res) => {
           <a class="btn btn-green" href="/mark-packed/${order.orderId}?key=${req.query.key}">
             Mark Packed
           </a>
-
+          <a class="btn btn-purple" href="/packing-slip/${order.storeId}/${order.orderId}?key=${req.query.key}">
+          Packing Slip
+          </a>
           <a class="btn btn-dark" href="/ship/${order.storeId}/${order.orderId}?key=${req.query.key}">
             Add Tracking
           </a>
@@ -1389,6 +1391,175 @@ app.get("/packed-orders", requireLogin, async (req, res) => {
   } catch (error) {
     console.error("Packed orders error:", error);
     res.status(500).send("Failed to load packed orders.");
+  }
+});
+
+app.get("/packing-slip/:storeId/:orderId", requireLogin, async (req, res) => {
+  try {
+    if (!db) return res.send("Database not connected.");
+
+    const storeDoc = await db.collection("ebayStores").doc(req.params.storeId).get();
+
+    if (!storeDoc.exists) {
+      return res.status(404).send("Store not found.");
+    }
+
+    const store = storeDoc.data();
+    const refreshedTokenData = await refreshEbayAccessToken(store.refreshToken);
+
+    const response = await fetch(
+      `https://api.ebay.com/sell/fulfillment/v1/order/${req.params.orderId}`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${refreshedTokenData.access_token}`,
+          "Content-Type": "application/json",
+          "Accept-Language": "en-US"
+        }
+      }
+    );
+
+    const order = await response.json();
+
+    if (!response.ok) {
+      return res.status(400).json(order);
+    }
+
+    let itemsHtml = "";
+
+    if (order.lineItems) {
+      order.lineItems.forEach(item => {
+        itemsHtml += `
+          <tr>
+            <td>${item.title || "Unknown Item"}</td>
+            <td>${item.sku || "No SKU"}</td>
+            <td>${item.quantity || 1}</td>
+            <td>${item.total?.value || "0.00"} ${item.total?.currency || ""}</td>
+          </tr>
+        `;
+      });
+    }
+
+    const shipTo = order.fulfillmentStartInstructions?.[0]?.shippingStep?.shipTo || {};
+
+    res.send(`
+      <html>
+        <head>
+          <title>Packing Slip</title>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              padding: 30px;
+              color: #111;
+              background: white;
+            }
+
+            .top {
+              display: flex;
+              justify-content: space-between;
+              margin-bottom: 30px;
+            }
+
+            h1 {
+              margin: 0;
+            }
+
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-top: 20px;
+            }
+
+            th, td {
+              border: 1px solid #ccc;
+              padding: 10px;
+              text-align: left;
+            }
+
+            th {
+              background: #f3f4f6;
+            }
+
+            .print-btn {
+              padding: 12px 18px;
+              border: none;
+              background: #111827;
+              color: white;
+              border-radius: 8px;
+              cursor: pointer;
+            }
+
+            @media print {
+              .no-print {
+                display: none;
+              }
+
+              body {
+                padding: 0;
+              }
+            }
+          </style>
+        </head>
+
+        <body>
+          <div class="top">
+            <div>
+              <h1>Packing Slip</h1>
+              <p><strong>Store:</strong> ${store.username || "Unknown Store"}</p>
+              <p><strong>Order:</strong> ${order.orderId}</p>
+              <p><strong>Created:</strong> ${order.creationDate}</p>
+            </div>
+
+            <div class="no-print">
+              <button class="print-btn" onclick="window.print()">Print Packing Slip</button>
+              <br><br>
+              <a href="/packing?key=${req.query.key}">Back to Packing Queue</a>
+            </div>
+          </div>
+
+          <hr>
+
+          <h2>Ship To</h2>
+          <p>
+            ${shipTo.fullName || ""}<br>
+            ${shipTo.contactAddress?.addressLine1 || ""}<br>
+            ${shipTo.contactAddress?.addressLine2 || ""}<br>
+            ${shipTo.contactAddress?.city || ""}, 
+            ${shipTo.contactAddress?.stateOrProvince || ""} 
+            ${shipTo.contactAddress?.postalCode || ""}<br>
+            ${shipTo.contactAddress?.countryCode || ""}
+          </p>
+
+          <h2>Items</h2>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>SKU</th>
+                <th>Qty</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              ${itemsHtml || "<tr><td colspan='4'>No line items found.</td></tr>"}
+            </tbody>
+          </table>
+
+          <h2>Total</h2>
+          <p>
+            <strong>
+              ${order.pricingSummary?.total?.value || "0.00"}
+              ${order.pricingSummary?.total?.currency || ""}
+            </strong>
+          </p>
+        </body>
+      </html>
+    `);
+  } catch (error) {
+    console.error("Packing slip error:", error);
+    res.status(500).send("Failed to load packing slip.");
   }
 });
 
