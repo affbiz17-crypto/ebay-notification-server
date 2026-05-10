@@ -306,6 +306,7 @@ function shell({ title, key, content, metaRefresh = false }) {
               <a href="/all-orders?key=${key || ''}">All Orders</a>
               <a href="/shipping?key=${key || ''}">Shipping Center</a>
               <a href="/packing?key=${key || ''}">Packing Queue</a>
+              <a href="/packed-orders?key=${key || ''}">Packed Orders</a>
               <a href="/connect/ebay">Connect Store</a>
               <a href="/login">Login</a>
             </nav>
@@ -1295,7 +1296,11 @@ app.get("/packing", requireLogin, async (req, res) => {
           <h1>Packing Queue</h1>
           <div class="muted">Internal workflow before uploading tracking to eBay.</div>
         </div>
-        <a class="btn btn-dark" href="/dashboard?key=${req.query.key}">Back to Dashboard</a>
+        
+        <a class="btn btn-dark" href="/dashboard?key=${req.query.key}">Back to Dashboard</a> 
+        <a class="btn btn-purple" href="/packed-orders?key=${req.query.key}">
+  View Packed Orders
+</a>
       </div>
 
       <div class="grid">
@@ -1334,6 +1339,56 @@ app.get("/mark-packed/:orderId", requireLogin, async (req, res) => {
   } catch (error) {
     console.error("Mark packed error:", error);
     res.status(500).send("Failed to mark packed.");
+  }
+});
+
+app.get("/packed-orders", requireLogin, async (req, res) => {
+  try {
+    if (!db) return res.send("Database not connected.");
+
+    const snapshot = await db.collection("packingQueue")
+      .where("status", "==", "Packed")
+      .get();
+
+    let packedHtml = "";
+
+    snapshot.forEach(doc => {
+      const packed = doc.data();
+
+      packedHtml += `
+        <div class="order-card">
+          <h2>Order #${packed.orderId}</h2>
+          <p><strong>Status:</strong> <span class="status-pill" style="background:#16a34a;">Packed</span></p>
+          <p class="muted"><strong>Packed At:</strong> ${packed.packedAt?.toDate ? packed.packedAt.toDate().toLocaleString() : "Unknown"}</p>
+        </div>
+      `;
+    });
+
+    const content = `
+      <div class="topbar">
+        <div>
+          <h1>Packed Orders</h1>
+          <div class="muted">Orders packed and waiting for tracking upload.</div>
+        </div>
+        <a class="btn btn-dark" href="/packing?key=${req.query.key}">Back to Packing Queue</a>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <div class="metric-label">Packed Orders</div>
+          <div class="metric-value">${snapshot.size}</div>
+        </div>
+      </div>
+
+      <div class="orders-list">
+        ${packedHtml || "<p>No packed orders yet.</p>"}
+      </div>
+    `;
+
+    res.send(shell({ title: "Packed Orders", key: req.query.key, content }));
+  } catch (error) {
+    console.error("Packed orders error:", error);
+    res.status(500).send("Failed to load packed orders.");
   }
 });
 
