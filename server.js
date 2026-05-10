@@ -1080,10 +1080,11 @@ app.get("/shipping", requireLogin, async (req, res) => {
         data.orders
           .filter(order => order.orderFulfillmentStatus !== "FULFILLED")
           .forEach(order => {
-            shippingOrders.push({
-              storeName: store.username,
-              ...order
-            });
+           shippingOrders.push({
+  storeId: doc.id,
+  storeName: store.username,
+  ...order
+});
           });
       }
     }
@@ -1101,7 +1102,10 @@ app.get("/shipping", requireLogin, async (req, res) => {
           <p class="muted"><strong>Store:</strong> ${order.storeName || "Unknown Store"}</p>
           <p class="muted"><strong>Buyer:</strong> ${order.buyer?.username || "Unknown"}</p>
           <p><strong>Total:</strong> ${order.pricingSummary?.total?.value || "0.00"} ${order.pricingSummary?.total?.currency || ""}</p>
-          <p><strong>Status:</strong> <span class="status-pill" style="background:${statusColor};">${order.orderFulfillmentStatus}</span></p>
+          <p><strong>Status:</strong> <span class="status-pill" style="background:${statusColor};">${order.orderFulfillmentStatus}</span></p> 
+          <a class="btn btn-green" href="/ship/${order.storeId}/${order.orderId}?key=${req.query.key}">
+  Add Tracking
+</a>
           <p class="muted"><strong>Created:</strong> ${order.creationDate}</p>
         </div>
       `;
@@ -1134,6 +1138,91 @@ app.get("/shipping", requireLogin, async (req, res) => {
     res.status(500).send("Failed to load shipping center.");
   }
 });
+
+app.get("/ship/:storeId/:orderId", requireLogin, async (req, res) => {
+  const content = `
+    <div class="topbar">
+      <div>
+        <h1>Mark Order Shipped</h1>
+        <div class="muted">Order #${req.params.orderId}</div>
+      </div>
+      <a class="btn btn-dark" href="/shipping?key=${req.query.key}">Back to Shipping</a>
+    </div>
+
+    <div class="card" style="max-width:600px;">
+      <form method="POST" action="/ship/${req.params.storeId}/${req.params.orderId}?key=${req.query.key}">
+        <label>Carrier</label>
+        <input name="carrier" placeholder="USPS, UPS, FedEx" required>
+
+        <label>Tracking Number</label>
+        <input name="trackingNumber" placeholder="Enter tracking number" required>
+
+        <button type="submit">Submit Tracking to eBay</button>
+      </form>
+    </div>
+  `;
+
+  res.send(shell({ title: "Mark Shipped", key: req.query.key, content }));
+}); 
+app.post("/ship/:storeId/:orderId", requireLogin, async (req, res) => {
+  try {
+    if (!db) return res.status(500).send("Database not connected.");
+
+    const { carrier, trackingNumber } = req.body;
+
+    const storeDoc = await db.collection("ebayStores").doc(req.params.storeId).get();
+
+    if (!storeDoc.exists) {
+      return res.status(404).send("Store not found.");
+    }
+
+    const store = storeDoc.data();
+    const refreshedTokenData = await refreshEbayAccessToken(store.refreshToken);
+
+    const response = await fetch(
+      `https://api.ebay.com/sell/fulfillment/v1/order/${req.params.orderId}/shipping_fulfillment`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${refreshedTokenData.access_token}`,
+          "Content-Type": "application/json",
+          "Accept-Language": "en-US"
+        },
+        body: JSON.stringify({
+          trackingNumber,
+          shippingCarrierCode: carrier
+        })
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error("Ship error:", errorData);
+      return res.status(400).json(errorData);
+    }
+
+    res.send(`
+      <html>
+        <head>${baseStyles}</head>
+        <body>
+          <div class="login-wrap">
+            <div class="login-card">
+              <h1>Tracking Submitted ✅</h1>
+              <p class="muted">Order #${req.params.orderId}</p>
+              <a class="btn" href="/shipping?key=${req.query.key}">Back to Shipping Center</a>
+            </div>
+          </div>
+        </body>
+      </html>
+    `);
+  } catch (error) {
+    console.error("Submit tracking error:", error);
+    res.status(500).send("Failed to submit tracking.");
+  }
+});
+
+        app.get("/ship/:storeId/:orderId" 
+        app.post("/ship/:storeId/:orderId"
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
