@@ -1752,6 +1752,80 @@ app.post("/bulk-packing-slips", requireLogin, async (req, res) => {
   }
 });
 
+app.get("/api/dashboard-stats", requireLogin, async (req, res) => {
+  try {
+    if (!db) return res.status(500).json({ error: "Database not connected." });
+
+    const snapshot = await db.collection("ebayStores").get();
+
+    let totalRecentOrders = 0;
+    let totalAwaitingShipment = 0;
+    let todaySales = 0;
+    let sevenDaySales = 0;
+    let thirtyDaySales = 0;
+
+    const now = new Date();
+
+    const todayStart = new Date(now);
+    todayStart.setHours(0, 0, 0, 0);
+
+    const sevenDaysAgo = new Date(now);
+    sevenDaysAgo.setDate(now.getDate() - 7);
+
+    const thirtyDaysAgo = new Date(now);
+    thirtyDaysAgo.setDate(now.getDate() - 30);
+
+    for (const doc of snapshot.docs) {
+      const store = doc.data();
+
+      const refreshedTokenData = await refreshEbayAccessToken(store.refreshToken);
+
+      const ordersResponse = await fetch(
+        "https://api.ebay.com/sell/fulfillment/v1/order?limit=50",
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${refreshedTokenData.access_token}`,
+            "Content-Type": "application/json",
+            "Accept-Language": "en-US"
+          }
+        }
+      );
+
+      const ordersData = await ordersResponse.json();
+
+      totalRecentOrders += ordersData.total || 0;
+
+      if (ordersData.orders) {
+        totalAwaitingShipment += ordersData.orders.filter(
+          order => order.orderFulfillmentStatus === "NOT_STARTED"
+        ).length;
+
+        ordersData.orders.forEach(order => {
+          const orderDate = new Date(order.creationDate);
+          const orderTotal = Number(order.pricingSummary?.total?.value || 0);
+
+          if (orderDate >= todayStart) todaySales += orderTotal;
+          if (orderDate >= sevenDaysAgo) sevenDaySales += orderTotal;
+          if (orderDate >= thirtyDaysAgo) thirtyDaySales += orderTotal;
+        });
+      }
+    }
+
+    res.json({
+      totalRecentOrders,
+      totalAwaitingShipment,
+      todaySales: todaySales.toFixed(2),
+      sevenDaySales: sevenDaySales.toFixed(2),
+      thirtyDaySales: thirtyDaySales.toFixed(2),
+      updatedAt: new Date().toLocaleTimeString()
+    });
+  } catch (error) {
+    console.error("Dashboard stats error:", error);
+    res.status(500).json({ error: "Failed to load dashboard stats." });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
