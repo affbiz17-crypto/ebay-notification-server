@@ -315,7 +315,7 @@ function shell({ title, key, content, metaRefresh = false }) {
             ${content}
           </main>
         </div>
-      </body>
+           </body>
     </html>
   `;
 }
@@ -681,12 +681,14 @@ app.get("/dashboard", requireLogin, async (req, res) => {
       </div>
 
       <div class="grid">
-        <div class="card"><div class="metric-label">Total Recent Orders</div><div class="metric-value">${totalRecentOrders}</div></div>
-        <div class="card"><div class="metric-label">Awaiting Shipment</div><div class="metric-value">${totalAwaitingShipment}</div></div>
-        <div class="card"><div class="metric-label">Today's Sales</div><div class="metric-value">$${todaySales.toFixed(2)}</div></div>
-        <div class="card"><div class="metric-label">7 Day Sales</div><div class="metric-value">$${sevenDaySales.toFixed(2)}</div></div>
-        <div class="card"><div class="metric-label">30 Day Sales</div><div class="metric-value">$${thirtyDaySales.toFixed(2)}</div></div>
-      </div>
+  <div class="card"><div class="metric-label">Total Recent Orders</div><div id="totalOrders" class="metric-value">${totalRecentOrders}</div></div>
+  <div class="card"><div class="metric-label">Awaiting Shipment</div><div id="awaitingShipment" class="metric-value">${totalAwaitingShipment}</div></div>
+  <div class="card"><div class="metric-label">Today's Sales</div><div id="todaySales" class="metric-value">$${todaySales.toFixed(2)}</div></div>
+  <div class="card"><div class="metric-label">7 Day Sales</div><div id="sevenDaySales" class="metric-value">$${sevenDaySales.toFixed(2)}</div></div>
+  <div class="card"><div class="metric-label">30 Day Sales</div><div id="thirtyDaySales" class="metric-value">$${thirtyDaySales.toFixed(2)}</div></div>
+</div>
+
+<p id="lastUpdated" class="muted">Live updates enabled</p>
 
       <div class="button-row">
         <a class="btn" href="/connect/ebay">Connect Another eBay Store</a>
@@ -705,30 +707,14 @@ app.get("/dashboard", requireLogin, async (req, res) => {
         </div>
       </div>
 
-      <script>
-        const currentOrderCount = ${totalRecentOrders};
-        const previousOrderCount = Number(localStorage.getItem("previousOrderCount") || 0);
+     <script>
+  const currentOrderCount = ${totalRecentOrders};
+  ...
+  localStorage.setItem("previousOrderCount", currentOrderCount);
+</script>
 
-        if ("Notification" in window && Notification.permission !== "granted") {
-          Notification.requestPermission();
-        }
 
-        if (previousOrderCount > 0 && currentOrderCount > previousOrderCount) {
-          const newOrders = currentOrderCount - previousOrderCount;
-
-          if ("Notification" in window && Notification.permission === "granted") {
-            new Notification("New eBay Order!", {
-              body: newOrders + " new order(s) received."
-            });
-          }
-
-          const audio = new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg");
-          audio.play().catch(() => {});
-        }
-
-        localStorage.setItem("previousOrderCount", currentOrderCount);
-      </script>
-    `;
+`;
 
     res.send(shell({ title: "eBay Store Dashboard", key: req.query.key, content, metaRefresh: true }));
   } catch (error) {
@@ -1221,10 +1207,6 @@ app.post("/ship/:storeId/:orderId", requireLogin, async (req, res) => {
     console.error("Submit tracking error:", error);
     res.status(500).send("Failed to submit tracking.");
   }
-});
-
-app.post("/ship/:storeId/:orderId", requireLogin, async (req, res) => {
-  // your existing POST ship code
 });
 
 app.get("/packing", requireLogin, async (req, res) => {
