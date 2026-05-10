@@ -169,10 +169,63 @@ app.get("/dashboard", async (req, res) => {
 
     let storeCards = "";
 
-    snapshot.forEach(doc => {
-      const store = doc.data();
+    for (const doc of snapshot.docs) {
+  const store = doc.data();
 
-      storeCards += `
+  let orderCount = 0;
+
+  try {
+    const refreshedTokenData = await refreshEbayAccessToken(store.refreshToken);
+
+    await db.collection("ebayStores").doc(doc.id).update({
+      accessToken: refreshedTokenData.access_token,
+      accessTokenExpiresIn: refreshedTokenData.expires_in,
+      lastTokenRefresh: new Date()
+    });
+
+    const ordersResponse = await fetch(
+      "https://api.ebay.com/sell/fulfillment/v1/order?limit=50",
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${refreshedTokenData.access_token}`,
+          "Content-Type": "application/json",
+          "Accept-Language": "en-US"
+        }
+      }
+    );
+
+    const ordersData = await ordersResponse.json();
+    orderCount = ordersData.total || 0;
+
+  } catch (err) {
+    console.error("Order count error:", err);
+  }
+
+  storeCards += `
+    <div style="border:1px solid #ddd; border-radius:12px; padding:16px; margin-bottom:12px;">
+      <h2>${store.username || "Unknown Store"}</h2>
+      <p><strong>eBay User ID:</strong> ${store.ebayUserId || "Unknown"}</p>
+      <p><strong>Status:</strong> Connected ✅</p>
+      <p><strong>Recent Orders:</strong> ${orderCount}</p>
+
+      <p>
+        <a href="/orders/${doc.id}">
+          <button style="
+            padding:10px 14px;
+            border:none;
+            border-radius:8px;
+            background:#111827;
+            color:white;
+            cursor:pointer;
+          ">
+            View Orders
+          </button>
+        </a>
+      </p>
+    </div>
+  `;
+}
         <div style="border:1px solid #ddd; border-radius:12px; padding:16px; margin-bottom:12px;">
           <h2>${store.username || "Unknown Store"}</h2>
           <p><strong>eBay User ID:</strong> ${store.ebayUserId || "Unknown"}</p>
