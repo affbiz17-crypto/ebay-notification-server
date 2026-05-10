@@ -309,6 +309,7 @@ function shell({ title, key, content, metaRefresh = false }) {
               <a href="/packed-orders?key=${key || ''}">Packed Orders</a> 
               <a href="/profit?key=${key || ''}">Profit Center</a> 
               <a href="/costs?key=${key || ''}">SKU Costs</a>
+              <a href="/profit-orders?key=${key || ''}">Profit Orders</a>
               <a href="/connect/ebay">Connect Store</a>
               <a href="/login">Login</a>
             </nav>
