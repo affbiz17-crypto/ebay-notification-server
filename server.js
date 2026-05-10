@@ -5,7 +5,8 @@ import admin from "firebase-admin";
 dotenv.config();
 
 const app = express();
-app.use(express.json());
+app.use(express.json()); 
+app.use(express.urlencoded({ extended: true }));
 
 const PORT = process.env.PORT || 3000;
 const EBAY_TOKEN_URL = "https://api.ebay.com/identity/v1/oauth2/token";
@@ -185,7 +186,37 @@ app.get("/api/stores", async (req, res) => {
   }
 });
 
-app.get("/dashboard", async (req, res) => {
+app.get("/login", (req, res) => {
+  res.send(`
+    <html>
+      <body style="font-family: Arial; padding:40px; background:#f5f5f5;">
+        <h1>Login</h1>
+        <form method="POST" action="/login">
+          <input name="password" type="password" placeholder="Admin password" style="padding:12px; width:260px;">
+          <button type="submit" style="padding:12px 18px;">Login</button>
+        </form>
+      </body>
+    </html>
+  `);
+});
+
+app.post("/login", (req, res) => {
+  if (req.body.password === process.env.ADMIN_PASSWORD) {
+    res.redirect(`/dashboard?key=${process.env.ADMIN_PASSWORD}`);
+  } else {
+    res.send("Wrong password.");
+  }
+});
+
+function requireLogin(req, res, next) {
+  if (req.query.key === process.env.ADMIN_PASSWORD) {
+    return next();
+  }
+
+  res.redirect("/login");
+}
+
+app.get("/dashboard", requireLogin, async (req, res) => {
   try {
     if (!db) return res.send("Database not connected.");
 
@@ -361,7 +392,7 @@ app.get("/dashboard", async (req, res) => {
             </button>
           </a>
 
-          <a href="/all-orders">
+          <a href="/all-orders?key=${req.query.key}">
             <button style="padding:12px 18px; border-radius:8px; border:none; background:#111827; color:white; margin-left:10px; cursor:pointer;">
               View All Orders
             </button>
@@ -557,7 +588,7 @@ app.get("/delete-store/:storeId", async (req, res) => {
   }
 });
 
-app.get("/all-orders", async (req, res) => {
+app.get("/all-orders", requireLogin, async (req, res) => {
   try {
     if (!db) return res.send("Database not connected.");
 
