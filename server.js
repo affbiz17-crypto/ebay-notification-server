@@ -207,6 +207,41 @@ app.get("/dashboard", async (req, res) => {
   }
 });
 
+async function refreshEbayAccessToken(refreshToken) {
+  const credentials = Buffer.from(
+    `${process.env.EBAY_CLIENT_ID}:${process.env.EBAY_CLIENT_SECRET}`
+  ).toString("base64");
+
+  const response = await fetch(EBAY_TOKEN_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Authorization: `Basic ${credentials}`
+    },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+      scope: [
+        "https://api.ebay.com/oauth/api_scope",
+        "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
+        "https://api.ebay.com/oauth/api_scope/sell.inventory.readonly",
+        "https://api.ebay.com/oauth/api_scope/sell.account.readonly",
+        "https://api.ebay.com/oauth/api_scope/sell.marketing.readonly",
+        "https://api.ebay.com/oauth/api_scope/sell.analytics.readonly",
+        "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly"
+      ].join(" ")
+    })
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(JSON.stringify(data));
+  }
+
+  return data;
+}
+
 app.get("/api/inventory/:storeId", async (req, res) => {
   try {
     if (!db) {
@@ -219,6 +254,8 @@ app.get("/api/inventory/:storeId", async (req, res) => {
       return res.status(404).send("Store not found.");
     }
 
+Authorization: `Bearer ${store.accessToken}`,
+    
     const store = storeDoc.data();
 
     const response = await fetch(
