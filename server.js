@@ -298,7 +298,9 @@ function shell({ title, key, content, metaRefresh = false }) {
         <meta name="theme-color" content="#111827">
         ${metaRefresh ? '<meta http-equiv="refresh" content="60">' : ''}
         ${baseStyles}
-      </head>
+      </head> 
+
+      
       <body>
         <div class="layout">
           <aside class="sidebar">
@@ -322,10 +324,13 @@ function shell({ title, key, content, metaRefresh = false }) {
           </main>
         </div> 
         <script>
-if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("/service-worker.js");
-}
-</script>
+    <script>
+      if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("/service-worker.js")
+      .then(() => console.log("Service worker registered"))
+      .catch(error => console.log("Service worker failed:", error));
+      }
+  </script>
            </body>
     </html>
   `;
@@ -492,7 +497,9 @@ app.get("/login", (req, res) => {
   res.send(`
     <html>
       <head>
-        <title>Login</title>
+        <title>Login</title> 
+        <link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#111827">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         ${baseStyles}
       </head>
