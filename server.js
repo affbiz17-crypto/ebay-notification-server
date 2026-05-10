@@ -710,7 +710,38 @@ app.get("/dashboard", requireLogin, async (req, res) => {
      <script>
   const currentOrderCount = ${totalRecentOrders};
   ...
-  localStorage.setItem("previousOrderCount", currentOrderCount);
+  localStorage.setItem("previousOrderCount", currentOrderCount); 
+  <script>
+async function refreshDashboardStats() {
+  try {
+    const response = await fetch("/api/dashboard-stats?key=${req.query.key}");
+    const stats = await response.json();
+
+    document.getElementById("totalOrders").innerText =
+      stats.totalRecentOrders;
+
+    document.getElementById("awaitingShipment").innerText =
+      stats.totalAwaitingShipment;
+
+    document.getElementById("todaySales").innerText =
+      "$" + stats.todaySales;
+
+    document.getElementById("sevenDaySales").innerText =
+      "$" + stats.sevenDaySales;
+
+    document.getElementById("thirtyDaySales").innerText =
+      "$" + stats.thirtyDaySales;
+
+    document.getElementById("lastUpdated").innerText =
+      "Updated: " + stats.updatedAt;
+
+  } catch (error) {
+    console.error("Live refresh error:", error);
+  }
+}
+
+setInterval(refreshDashboardStats, 30000);
+</script>
 </script>
 
 
