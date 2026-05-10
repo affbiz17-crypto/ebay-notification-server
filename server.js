@@ -672,7 +672,28 @@ app.get("/dashboard", requireLogin, async (req, res) => {
     });
 
     const content = `
-      <div class="topbar">
+      <div class="topbar"> 
+<form method="GET" action="/all-orders" class="card" style="margin-bottom:20px;">
+  <input type="hidden" name="key" value="${req.query.key}">
+
+  <label>Search buyer, order #, or store</label>
+  <input name="search" value="${req.query.search || ""}" placeholder="Search orders...">
+
+  <label>Status</label>
+  <select name="status" style="width:100%; padding:14px; border-radius:14px; margin:14px 0; background:#111827; color:white; border:1px solid rgba(148,163,184,.22);">
+    <option value="">All Statuses</option>
+    <option value="NOT_STARTED" ${req.query.status === "NOT_STARTED" ? "selected" : ""}>Not Started</option>
+    <option value="IN_PROGRESS" ${req.query.status === "IN_PROGRESS" ? "selected" : ""}>In Progress</option>
+    <option value="FULFILLED" ${req.query.status === "FULFILLED" ? "selected" : ""}>Fulfilled</option>
+  </select>
+
+  <button type="submit">Apply Filters</button>
+
+  <a class="btn btn-dark" href="/all-orders?key=${req.query.key}" style="margin-left:10px;">
+    Clear
+  </a>
+</form>
+      
         <div>
           <h1>Command Center</h1>
           <div class="muted">Live eBay operations, sales, orders, and store management.</div>
@@ -919,7 +940,8 @@ app.get("/all-orders", requireLogin, async (req, res) => {
 
     const snapshot = await db.collection("ebayStores").get();
     const allOrders = [];
-
+    const search = (req.query.search || "").toLowerCase();
+    const statusFilter = req.query.status || "";
     for (const doc of snapshot.docs) {
       const store = doc.data();
       const refreshedTokenData = await refreshEbayAccessToken(store.refreshToken);
@@ -954,11 +976,27 @@ app.get("/all-orders", requireLogin, async (req, res) => {
       }
     }
 
-    allOrders.sort((a, b) => new Date(b.creationDate) - new Date(a.creationDate));
+   let filteredOrders = allOrders;
 
-    let ordersHtml = "";
+if (search) {
+  filteredOrders = filteredOrders.filter(order =>
+    order.orderId?.toLowerCase().includes(search) ||
+    order.buyer?.username?.toLowerCase().includes(search) ||
+    order.storeName?.toLowerCase().includes(search)
+  );
+}
 
-    allOrders.forEach(order => {
+if (statusFilter) {
+  filteredOrders = filteredOrders.filter(order =>
+    order.orderFulfillmentStatus === statusFilter
+  );
+}
+
+filteredOrders.sort((a, b) => new Date(b.creationDate) - new Date(a.creationDate));
+
+let ordersHtml = "";
+
+   filteredOrders.forEach(order => {
       const statusColor = getStatusColor(order.orderFulfillmentStatus);
 
       ordersHtml += `
@@ -981,7 +1019,8 @@ app.get("/all-orders", requireLogin, async (req, res) => {
         </div>
         <a class="btn btn-dark" href="/dashboard?key=${req.query.key}">Back to Dashboard</a>
       </div>
-      <div class="orders-list">${ordersHtml || "<p>No orders found.</p>"}</div>
+     <p class="muted">Showing ${filteredOrders.length} of ${allOrders.length} orders</p>
+<div class="orders-list">${ordersHtml || "<p>No matching orders found.</p>"}</div>
     `;
 
     res.send(shell({ title: "All eBay Store Orders", key: req.query.key, content, metaRefresh: true }));
