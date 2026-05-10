@@ -509,6 +509,20 @@ app.get("/all-orders", async (req, res) => {
 
     let allOrders = [];
 
+<p>
+  <strong>Status:</strong>
+  <span style="
+    background:${statusColor};
+    color:white;
+    padding:4px 8px;
+    border-radius:999px;
+    font-size:12px;
+    font-weight:bold;
+  ">
+    ${order.orderFulfillmentStatus}
+  </span>
+</p>
+    
     for (const doc of snapshot.docs) {
       const store = doc.data();
 
@@ -548,13 +562,31 @@ app.get("/all-orders", async (req, res) => {
     let ordersHtml = "";
 
     allOrders.forEach(order => {
+    const statusColor =
+  order.orderFulfillmentStatus === "NOT_STARTED"
+    ? "#dc2626"
+    : order.orderFulfillmentStatus === "IN_PROGRESS"
+    ? "#f59e0b"
+    : "#16a34a";
+      
       ordersHtml += `
         <div style="border:1px solid #ddd; border-radius:12px; padding:16px; margin-bottom:16px; background:white;">
           <h2>Order #${order.orderId}</h2>
           <p><strong>Store:</strong> ${order.storeName}</p>
           <p><strong>Buyer:</strong> ${order.buyer?.username || "Unknown"}</p>
           <p><strong>Total:</strong> ${order.pricingSummary?.total?.value || "0.00"} ${order.pricingSummary?.total?.currency || ""}</p>
-          <p><strong>Status:</strong> ${order.orderFulfillmentStatus}</p>
+          <p> <strong>Status:</strong>
+  <span style="
+    background:${statusColor};
+    color:white;
+    padding:4px 8px;
+    border-radius:999px;
+    font-size:12px;
+    font-weight:bold;
+  ">
+    ${order.orderFulfillmentStatus}
+  </span>
+</p>
           <p><strong>Created:</strong> ${order.creationDate}</p>
         </div>
       `;
