@@ -316,8 +316,9 @@ app.get("/dashboard", async (req, res) => {
     res.send(`
       <html>
         <head>
-          <title>eBay Store Dashboard</title>
-        </head>
+  <title>eBay Store Dashboard</title>
+  <meta http-equiv="refresh" content="60">
+</head>
 
         <body style="font-family: Arial; padding:20px; background:#f5f5f5;">
           <h1>Connected eBay Stores</h1>
@@ -631,8 +632,9 @@ app.get("/all-orders", async (req, res) => {
     res.send(`
       <html>
         <head>
-          <title>All eBay Store Orders</title>
-        </head>
+  <title>All eBay Store Orders</title>
+  <meta http-equiv="refresh" content="60">
+</head>
 
         <body style="font-family: Arial; padding:20px; background:#f3f4f6;">
           <h1>All eBay Store Orders</h1>
