@@ -320,7 +320,12 @@ function shell({ title, key, content, metaRefresh = false }) {
           <main class="main">
             ${content}
           </main>
-        </div>
+        </div> 
+        <script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/service-worker.js");
+}
+</script>
            </body>
     </html>
   `;
