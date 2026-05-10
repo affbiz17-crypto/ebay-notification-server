@@ -5,7 +5,8 @@ import admin from "firebase-admin";
 dotenv.config();
 
 const app = express();
-app.use(express.json()); 
+
+app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 const PORT = process.env.PORT || 3000;
@@ -100,26 +101,29 @@ app.get("/auth/ebay/callback", async (req, res) => {
     const userData = await userResponse.json();
 
     if (db) {
-  const storeId = userData.userId || userData.username;
+      const storeId = userData.userId || userData.username;
 
-  await db.collection("ebayStores").doc(storeId).set({
-    connectedAt: new Date(),
-    lastConnectedAt: new Date(),
-    ebayUserId: userData.userId || null,
-    username: userData.username || null,
-    email: userData.email || null,
-    accessToken: data.access_token,
-    refreshToken: data.refresh_token,
-    accessTokenExpiresIn: data.expires_in,
-    refreshTokenExpiresIn: data.refresh_token_expires_in
-  }, { merge: true });
-}
+      await db.collection("ebayStores").doc(storeId).set(
+        {
+          connectedAt: new Date(),
+          lastConnectedAt: new Date(),
+          ebayUserId: userData.userId || null,
+          username: userData.username || null,
+          email: userData.email || null,
+          accessToken: data.access_token,
+          refreshToken: data.refresh_token,
+          accessTokenExpiresIn: data.expires_in,
+          refreshTokenExpiresIn: data.refresh_token_expires_in
+        },
+        { merge: true }
+      );
+    }
 
     res.send(`
       Store connected successfully ✅<br><br>
       Username: ${userData.username || "Unknown"}<br>
       eBay User ID: ${userData.userId || "Unknown"}<br><br>
-      <a href="/dashboard">Go to Dashboard</a>
+      <a href="/login">Go to Login</a>
     `);
   } catch (error) {
     console.error("Callback error:", error);
@@ -162,6 +166,37 @@ async function refreshEbayAccessToken(refreshToken) {
   return data;
 }
 
+app.get("/login", (req, res) => {
+  res.send(`
+    <html>
+      <body style="font-family: Arial; padding:40px; background:#f5f5f5;">
+        <h1>Login</h1>
+
+        <form method="POST" action="/login">
+          <input name="password" type="password" placeholder="Admin password" style="padding:12px; width:260px;">
+          <button type="submit" style="padding:12px 18px;">Login</button>
+        </form>
+      </body>
+    </html>
+  `);
+});
+
+app.post("/login", (req, res) => {
+  if (req.body.password === process.env.ADMIN_PASSWORD) {
+    res.redirect(`/dashboard?key=${process.env.ADMIN_PASSWORD}`);
+  } else {
+    res.send("Wrong password.");
+  }
+});
+
+function requireLogin(req, res, next) {
+  if (req.query.key === process.env.ADMIN_PASSWORD) {
+    return next();
+  }
+
+  res.redirect("/login");
+}
+
 app.get("/api/stores", async (req, res) => {
   try {
     if (!db) return res.status(500).send("Database not connected.");
@@ -188,36 +223,6 @@ app.get("/api/stores", async (req, res) => {
     res.status(500).send("Failed to fetch stores.");
   }
 });
-
-app.get("/login", (req, res) => {
-  res.send(`
-    <html>
-      <body style="font-family: Arial; padding:40px; background:#f5f5f5;">
-        <h1>Login</h1>
-        <form method="POST" action="/login">
-          <input name="password" type="password" placeholder="Admin password" style="padding:12px; width:260px;">
-          <button type="submit" style="padding:12px 18px;">Login</button>
-        </form>
-      </body>
-    </html>
-  `);
-});
-
-app.post("/login", (req, res) => {
-  if (req.body.password === process.env.ADMIN_PASSWORD) {
-    res.redirect(`/dashboard?key=${process.env.ADMIN_PASSWORD}`);
-  } else {
-    res.send("Wrong password.");
-  }
-});
-
-function requireLogin(req, res, next) {
-  if (req.query.key === process.env.ADMIN_PASSWORD) {
-    return next();
-  }
-
-  res.redirect("/login");
-}
 
 app.get("/dashboard", requireLogin, async (req, res) => {
   try {
@@ -313,13 +318,13 @@ app.get("/dashboard", requireLogin, async (req, res) => {
           <p><strong>Recent Orders:</strong> ${orderCount}</p>
 
           <p>
-            <a href="/orders/${doc.id}">
+            <a href="/orders/${doc.id}?key=${req.query.key}">
               <button style="padding:10px 14px; border:none; border-radius:8px; background:#111827; color:white; cursor:pointer;">
                 View Orders
               </button>
             </a>
 
-            <a href="/delete-store/${doc.id}">
+            <a href="/delete-store/${doc.id}?key=${req.query.key}">
               <button style="padding:10px 14px; border:none; border-radius:8px; background:#dc2626; color:white; cursor:pointer; margin-left:10px;">
                 Remove Store
               </button>
@@ -350,9 +355,9 @@ app.get("/dashboard", requireLogin, async (req, res) => {
     res.send(`
       <html>
         <head>
-  <title>eBay Store Dashboard</title>
-  <meta http-equiv="refresh" content="60">
-</head>
+          <title>eBay Store Dashboard</title>
+          <meta http-equiv="refresh" content="60">
+        </head>
 
         <body style="font-family: Arial; padding:20px; background:#f5f5f5;">
           <h1>Connected eBay Stores</h1>
@@ -395,7 +400,7 @@ app.get("/dashboard", requireLogin, async (req, res) => {
             </button>
           </a>
 
-         <a href="/all-orders?key=${req.query.key}">
+          <a href="/all-orders?key=${req.query.key}">
             <button style="padding:12px 18px; border-radius:8px; border:none; background:#111827; color:white; margin-left:10px; cursor:pointer;">
               View All Orders
             </button>
@@ -404,6 +409,30 @@ app.get("/dashboard", requireLogin, async (req, res) => {
           <div style="margin-top:20px;">
             ${storeCards || "<p>No stores connected yet.</p>"}
           </div>
+
+          <script>
+            const currentOrderCount = ${totalRecentOrders};
+            const previousOrderCount = Number(localStorage.getItem("previousOrderCount") || 0);
+
+            if ("Notification" in window && Notification.permission !== "granted") {
+              Notification.requestPermission();
+            }
+
+            if (previousOrderCount > 0 && currentOrderCount > previousOrderCount) {
+              const newOrders = currentOrderCount - previousOrderCount;
+
+              if ("Notification" in window && Notification.permission === "granted") {
+                new Notification("New eBay Order!", {
+                  body: newOrders + " new order(s) received."
+                });
+              }
+
+              const audio = new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg");
+              audio.play().catch(() => {});
+            }
+
+            localStorage.setItem("previousOrderCount", currentOrderCount);
+          </script>
         </body>
       </html>
     `);
@@ -491,7 +520,7 @@ app.get("/api/orders/:storeId", async (req, res) => {
   }
 });
 
-app.get("/orders/:storeId", async (req, res) => {
+app.get("/orders/:storeId", requireLogin, async (req, res) => {
   try {
     if (!db) return res.status(500).send("Database not connected.");
 
@@ -562,7 +591,7 @@ app.get("/orders/:storeId", async (req, res) => {
         <body style="font-family: Arial; padding:20px; background:#f3f4f6;">
           <h1>${store.username || "Store"} Orders</h1>
 
-         <a href="/dashboard?key=${req.query.key}">
+          <a href="/dashboard?key=${req.query.key}">
             <button style="padding:10px 16px; margin-bottom:20px;">
               Back to Dashboard
             </button>
@@ -578,13 +607,13 @@ app.get("/orders/:storeId", async (req, res) => {
   }
 });
 
-app.get("/delete-store/:storeId", async (req, res) => {
+app.get("/delete-store/:storeId", requireLogin, async (req, res) => {
   try {
     if (!db) return res.status(500).send("Database not connected.");
 
     await db.collection("ebayStores").doc(req.params.storeId).delete();
 
-    res.redirect("/dashboard");
+    res.redirect(`/dashboard?key=${req.query.key}`);
   } catch (error) {
     console.error("Delete store error:", error);
     res.status(500).send("Failed to delete store.");
@@ -666,49 +695,22 @@ app.get("/all-orders", requireLogin, async (req, res) => {
     res.send(`
       <html>
         <head>
-  <title>All eBay Store Orders</title>
-  <meta http-equiv="refresh" content="60">
-</head>
+          <title>All eBay Store Orders</title>
+          <meta http-equiv="refresh" content="60">
+        </head>
 
         <body style="font-family: Arial; padding:20px; background:#f3f4f6;">
           <h1>All eBay Store Orders</h1>
 
-          <a href="/dashboard">
+          <a href="/dashboard?key=${req.query.key}">
             <button style="padding:10px 16px; margin-bottom:20px;">
               Back to Dashboard
             </button>
           </a>
 
-          ${ordersHtml || "<p>No orders found.</p>"} 
-                    <div style="margin-top:20px;">
-            ${storeCards || "<p>No stores connected yet.</p>"}
-          </div>
-
-          <script>
-            const currentOrderCount = ${totalRecentOrders};
-            const previousOrderCount = Number(localStorage.getItem("previousOrderCount") || 0);
-
-            if ("Notification" in window && Notification.permission !== "granted") {
-              Notification.requestPermission();
-            }
-
-            if (previousOrderCount > 0 && currentOrderCount > previousOrderCount) {
-              const newOrders = currentOrderCount - previousOrderCount;
-
-              if ("Notification" in window && Notification.permission === "granted") {
-                new Notification("New eBay Order!", {
-                  body: newOrders + " new order(s) received."
-                });
-              }
-
-              const audio = new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg");
-              audio.play().catch(() => {});
-            }
-
-            localStorage.setItem("previousOrderCount", currentOrderCount);
-          </script>
+          ${ordersHtml || "<p>No orders found.</p>"}
         </body>
-       </html>
+      </html>
     `);
   } catch (error) {
     console.error("All orders error:", error);
