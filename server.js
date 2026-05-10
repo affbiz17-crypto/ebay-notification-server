@@ -1221,8 +1221,9 @@ app.post("/ship/:storeId/:orderId", requireLogin, async (req, res) => {
   }
 });
 
-        app.get("/ship/:storeId/:orderId" 
-        app.post("/ship/:storeId/:orderId"
+app.post("/ship/:storeId/:orderId", requireLogin, async (req, res) => {
+  // your existing POST ship code
+});
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
