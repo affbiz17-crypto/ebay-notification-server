@@ -167,6 +167,19 @@ app.get("/dashboard", async (req, res) => {
     let storeCards = "";
     let totalRecentOrders = 0;
     let totalAwaitingShipment = 0;
+    let todaySales = 0;
+let sevenDaySales = 0;
+let thirtyDaySales = 0;
+
+const now = new Date();
+const todayStart = new Date(now);
+todayStart.setHours(0, 0, 0, 0);
+
+const sevenDaysAgo = new Date(now);
+sevenDaysAgo.setDate(now.getDate() - 7);
+
+const thirtyDaysAgo = new Date(now);
+thirtyDaysAgo.setDate(now.getDate() - 30);
     
     for (const doc of snapshot.docs) {
       const store = doc.data();
@@ -194,6 +207,23 @@ if (ordersData.orders) {
   totalAwaitingShipment += ordersData.orders.filter(order =>
     order.orderFulfillmentStatus === "NOT_STARTED"
   ).length;
+
+  ordersData.orders.forEach(order => {
+    const orderDate = new Date(order.creationDate);
+    const orderTotal = Number(order.pricingSummary?.total?.value || 0);
+
+    if (orderDate >= todayStart) {
+      todaySales += orderTotal;
+    }
+
+    if (orderDate >= sevenDaysAgo) {
+      sevenDaySales += orderTotal;
+    }
+
+    if (orderDate >= thirtyDaysAgo) {
+      thirtyDaySales += orderTotal;
+    }
+  });
 }
         
       } catch (err) {
@@ -244,7 +274,22 @@ if (ordersData.orders) {
   <div style="background:white; padding:18px; border-radius:12px; border:1px solid #ddd; min-width:180px;">
     <h3>Awaiting Shipment</h3>
     <p style="font-size:28px; font-weight:bold;">${totalAwaitingShipment}</p>
-  </div>
+  </div> 
+<div style="background:white; padding:18px; border-radius:12px; border:1px solid #ddd; min-width:180px;">
+  <h3>Today's Sales</h3>
+  <p style="font-size:28px; font-weight:bold;">$${todaySales.toFixed(2)}</p>
+</div>
+
+<div style="background:white; padding:18px; border-radius:12px; border:1px solid #ddd; min-width:180px;">
+  <h3>7 Day Sales</h3>
+  <p style="font-size:28px; font-weight:bold;">$${sevenDaySales.toFixed(2)}</p>
+</div>
+
+<div style="background:white; padding:18px; border-radius:12px; border:1px solid #ddd; min-width:180px;">
+  <h3>30 Day Sales</h3>
+  <p style="font-size:28px; font-weight:bold;">$${thirtyDaySales.toFixed(2)}</p>
+</div>
+  
 </div>
           <a href="/connect/ebay">
             <button style="padding:12px 18px; border-radius:8px; border:none; background:#2563eb; color:white;">
