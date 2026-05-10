@@ -201,7 +201,21 @@ app.get("/dashboard", async (req, res) => {
               <button style="padding:10px 14px; border:none; border-radius:8px; background:#111827; color:white; cursor:pointer;">
                 View Orders
               </button>
-            </a>
+            </a> 
+<a href="/delete-store/${doc.id}">
+  <button style="
+    padding:10px 14px;
+    border:none;
+    border-radius:8px;
+    background:#dc2626;
+    color:white;
+    cursor:pointer;
+    margin-left:10px;
+  ">
+    Remove Store
+  </button>
+</a>
+            
           </p>
         </div>
       `;
@@ -433,6 +447,22 @@ app.get("/orders/:storeId", async (req, res) => {
   } catch (error) {
     console.error("Orders page error:", error);
     res.status(500).send("Failed to load orders.");
+  }
+});
+
+app.get("/delete-store/:storeId", async (req, res) => {
+  try {
+    if (!db) {
+      return res.status(500).send("Database not connected.");
+    }
+
+    await db.collection("ebayStores").doc(req.params.storeId).delete();
+
+    res.redirect("/dashboard");
+
+  } catch (error) {
+    console.error("Delete store error:", error);
+    res.status(500).send("Failed to delete store.");
   }
 });
 
