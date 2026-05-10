@@ -169,7 +169,15 @@ app.get("/dashboard", async (req, res) => {
     let totalAwaitingShipment = 0;
     let todaySales = 0;
 let sevenDaySales = 0;
-let thirtyDaySales = 0;
+let thirtyDaySales = 0; 
+    let salesByDay = {};
+
+for (let i = 6; i >= 0; i--) {
+  const d = new Date();
+  d.setDate(now.getDate() - i);
+  const key = d.toISOString().split("T")[0];
+  salesByDay[key] = 0;
+}
 
 const now = new Date();
 const todayStart = new Date(now);
@@ -208,9 +216,15 @@ if (ordersData.orders) {
     order.orderFulfillmentStatus === "NOT_STARTED"
   ).length;
 
-  ordersData.orders.forEach(order => {
+  ordersData.orders.forEach(order => { 
+    
     const orderDate = new Date(order.creationDate);
-    const orderTotal = Number(order.pricingSummary?.total?.value || 0);
+    const orderTotal = Number(order.pricingSummary?.total?.value || 0); 
+    const dayKey = orderDate.toISOString().split("T")[0];
+
+if (salesByDay[dayKey] !== undefined) {
+  salesByDay[dayKey] += orderTotal;
+}
 
     if (orderDate >= todayStart) {
       todaySales += orderTotal;
@@ -509,7 +523,10 @@ app.get("/orders/:storeId", async (req, res) => {
         <head>
           <title>Orders Dashboard</title>
         </head>
-
+<div style="background:white; padding:18px; border-radius:12px; border:1px solid #ddd; margin:20px 0; max-width:900px;">
+  <h2>7-Day Sales Chart</h2>
+  ${salesChartHtml}
+</div>
         <body style="font-family: Arial; padding:20px; background:#f3f4f6;">
           <h1>${store.username} Orders</h1>
 
@@ -625,7 +642,35 @@ app.get("/all-orders", async (req, res) => {
       `;
     });
 
-    res.send(`
+const maxSales = Math.max(...Object.values(salesByDay), 1);
+
+let salesChartHtml = "";
+
+Object.entries(salesByDay).forEach(([day, amount]) => {
+  const barWidth = (amount / maxSales) * 100;
+
+  salesChartHtml += `
+    <div style="margin-bottom:12px;">
+      <strong>${day}</strong>
+      <div style="background:#e5e7eb; border-radius:999px; overflow:hidden; height:24px; margin-top:4px;">
+        <div style="
+          width:${barWidth}%;
+          background:#2563eb;
+          color:white;
+          height:24px;
+          padding-left:8px;
+          line-height:24px;
+          font-size:12px;
+          font-weight:bold;
+        ">
+          $${amount.toFixed(2)}
+        </div>
+      </div>
+    </div>
+  `;
+});
+    
+    res.send(
       <html>
         <body style="font-family: Arial; padding:20px; background:#f3f4f6;">
           <h1>All eBay Store Orders</h1>
