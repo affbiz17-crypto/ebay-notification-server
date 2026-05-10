@@ -159,6 +159,54 @@ stores.push({
   }
 });
 
+app.get("/dashboard", async (req, res) => {
+  try {
+    if (!db) {
+      return res.send("Database not connected.");
+    }
+
+    const snapshot = await db.collection("ebayStores").get();
+
+    let storeCards = "";
+
+    snapshot.forEach(doc => {
+      const store = doc.data();
+
+      storeCards += `
+        <div style="border:1px solid #ddd; border-radius:12px; padding:16px; margin-bottom:12px;">
+          <h2>${store.username || "Unknown Store"}</h2>
+          <p><strong>eBay User ID:</strong> ${store.ebayUserId || "Unknown"}</p>
+          <p><strong>Status:</strong> Connected ✅</p>
+        </div>
+      `;
+    });
+
+    res.send(`
+      <html>
+        <head>
+          <title>eBay Store Dashboard</title>
+        </head>
+        <body style="font-family: Arial; padding:20px; background:#f5f5f5;">
+          <h1>Connected eBay Stores</h1>
+
+          <a href="/connect/ebay">
+            <button style="padding:12px 18px; border-radius:8px; border:none; background:#2563eb; color:white;">
+              Connect Another eBay Store
+            </button>
+          </a>
+
+          <div style="margin-top:20px;">
+            ${storeCards || "<p>No stores connected yet.</p>"}
+          </div>
+        </body>
+      </html>
+    `);
+  } catch (error) {
+    console.error("Dashboard error:", error);
+    res.status(500).send("Failed to load dashboard.");
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
