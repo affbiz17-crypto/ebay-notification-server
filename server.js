@@ -307,7 +307,8 @@ function shell({ title, key, content, metaRefresh = false }) {
               <a href="/shipping?key=${key || ''}">Shipping Center</a>
               <a href="/packing?key=${key || ''}">Packing Queue</a>
               <a href="/packed-orders?key=${key || ''}">Packed Orders</a> 
-              <a href="/profit?key=${key || ''}">Profit Center</a>
+              <a href="/profit?key=${key || ''}">Profit Center</a> 
+              <a href="/costs?key=${key || ''}">SKU Costs</a>
               <a href="/connect/ebay">Connect Store</a>
               <a href="/login">Login</a>
             </nav>
@@ -1985,6 +1986,86 @@ app.get("/profit", requireLogin, async (req, res) => {
   } catch (error) {
     console.error("Profit center error:", error);
     res.status(500).send("Failed to load profit center.");
+  }
+});
+
+app.get("/costs", requireLogin, async (req, res) => {
+  try {
+    if (!db) return res.send("Database not connected.");
+
+    const snapshot = await db.collection("productCosts").orderBy("sku").get();
+
+    let rowsHtml = "";
+
+    snapshot.forEach(doc => {
+      const item = doc.data();
+
+      rowsHtml += `
+        <tr>
+          <td>${item.sku || ""}</td>
+          <td>$${Number(item.productCost || 0).toFixed(2)}</td>
+          <td>$${Number(item.shippingCost || 0).toFixed(2)}</td>
+          <td>${item.supplier || ""}</td>
+          <td>${item.notes || ""}</td>
+        </tr>
+      `;
+    });
+
+    const content = `
+      <div class="topbar">
+        <div>
+          <h1>SKU Cost Database</h1>
+          <div class="muted">Track product cost, shipping cost, supplier, and notes by SKU.</div>
+        </div>
+        <a class="btn btn-dark" href="/profit?key=${req.query.key}">Back to Profit Center</a>
+      </div>
+
+      <form method="POST" action="/costs?key=${req.query.key}" class="card" style="margin-bottom:20px;">
+        <label>SKU</label>
+        <input name="sku" placeholder="Example: ABC-123" required>
+
+        <label>Product Cost</label>
+        <input name="productCost" type="number" step="0.01" placeholder="25.00">
+
+        <label>Shipping Cost</label>
+        <input name="shippingCost" type="number" step="0.01" placeholder="8.00">
+
+        <label>Supplier</label>
+        <input name="supplier" placeholder="Motor State, Summit, etc.">
+
+        <label>Notes</label>
+        <input name="notes" placeholder="Optional notes">
+
+        <button type="submit">Save SKU Cost</button>
+      </form>
+
+      <div class="card">
+        <h2>Saved SKU Costs</h2>
+
+        <div style="overflow-x:auto;">
+          <table style="width:100%; border-collapse:collapse;">
+            <thead>
+              <tr>
+                <th style="text-align:left; padding:10px; border-bottom:1px solid rgba(148,163,184,.22);">SKU</th>
+                <th style="text-align:left; padding:10px; border-bottom:1px solid rgba(148,163,184,.22);">Product Cost</th>
+                <th style="text-align:left; padding:10px; border-bottom:1px solid rgba(148,163,184,.22);">Shipping Cost</th>
+                <th style="text-align:left; padding:10px; border-bottom:1px solid rgba(148,163,184,.22);">Supplier</th>
+                <th style="text-align:left; padding:10px; border-bottom:1px solid rgba(148,163,184,.22);">Notes</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              ${rowsHtml || "<tr><td colspan='5' style='padding:10px;'>No SKU costs saved yet.</td></tr>"}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+
+    res.send(shell({ title: "SKU Cost Database", key: req.query.key, content }));
+  } catch (error) {
+    console.error("Costs page error:", error);
+    res.status(500).send("Failed to load costs page.");
   }
 });
 
