@@ -2443,6 +2443,86 @@ app.get("/sync-inventory", requireLogin, async (req, res) => {
   }
 });
 
+app.get("/inventory-dashboard", requireLogin, async (req, res) => {
+  try {
+    if (!db) return res.send("Database not connected.");
+
+    const snapshots = await db.collection("inventorySnapshots")
+      .orderBy("syncedAt", "desc")
+      .limit(10)
+      .get();
+
+    let totalItems = 0;
+    let lowStockItems = 0;
+    let outOfStockItems = 0;
+    let inventoryHtml = "";
+
+    snapshots.forEach(doc => {
+      const snap = doc.data();
+      const items = snap.items || [];
+
+      totalItems += Number(snap.total || 0);
+
+      items.forEach(item => {
+        const qty = item.availability?.shipToLocationAvailability?.quantity ?? null;
+
+        if (qty === 0) outOfStockItems += 1;
+        if (qty !== null && qty > 0 && qty <= 3) lowStockItems += 1;
+
+        inventoryHtml += `
+          <div class="order-card">
+            <h2>${item.sku || "No SKU"}</h2>
+            <p class="muted"><strong>Store:</strong> ${snap.storeName || "Unknown Store"}</p>
+            <p><strong>Quantity:</strong> ${qty ?? "Unknown"}</p>
+            <p class="muted"><strong>Last Synced:</strong> ${
+              snap.syncedAt?.toDate ? snap.syncedAt.toDate().toLocaleString() : "Unknown"
+            }</p>
+          </div>
+        `;
+      });
+    });
+
+    const content = `
+      <div class="topbar">
+        <div>
+          <h1>Inventory Dashboard</h1>
+          <div class="muted">Inventory snapshots, low stock, and out-of-stock visibility.</div>
+        </div>
+
+        <a class="btn btn-purple" href="/sync-inventory?key=${req.query.key}">
+          Sync Inventory Now
+        </a>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <div class="metric-label">Total Items Synced</div>
+          <div class="metric-value">${totalItems}</div>
+        </div>
+
+        <div class="card">
+          <div class="metric-label">Low Stock Items</div>
+          <div class="metric-value">${lowStockItems}</div>
+        </div>
+
+        <div class="card">
+          <div class="metric-label">Out of Stock Items</div>
+          <div class="metric-value">${outOfStockItems}</div>
+        </div>
+      </div>
+
+      <div class="orders-list">
+        ${inventoryHtml || "<p>No synced inventory found yet. Run Sync Inventory first.</p>"}
+      </div>
+    `;
+
+    res.send(shell({ title: "Inventory Dashboard", key: req.query.key, content }));
+  } catch (error) {
+    console.error("Inventory dashboard error:", error);
+    res.status(500).send("Failed to load inventory dashboard.");
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
