@@ -315,6 +315,7 @@ function shell({ title, key, content, metaRefresh = false }) {
               <a href="/profit?key=${key || ''}">Profit Center</a> 
               <a href="/costs?key=${key || ''}">SKU Costs</a>
               <a href="/profit-orders?key=${key || ''}">Profit Orders</a>
+              <a href="/sync-inventory?key=${key || ''}">Sync Inventory</a>
               <a href="/connect/ebay">Connect Store</a>
               <a href="/login">Login</a>
             </nav>
@@ -2343,6 +2344,101 @@ app.get("/profit-orders", requireLogin, async (req, res) => {
   } catch (error) {
     console.error("Profit orders error:", error);
     res.status(500).send("Failed to load profit orders.");
+  }
+}); 
+
+app.get("/sync-inventory", requireLogin, async (req, res) => {
+  try {
+    if (!db) return res.send("Database not connected.");
+
+    const storesSnapshot = await db.collection("ebayStores").get();
+
+    let syncedStores = 0;
+    let totalItems = 0;
+    let syncHtml = "";
+
+    for (const doc of storesSnapshot.docs) {
+      const store = doc.data();
+
+      try {
+        const refreshedTokenData = await refreshEbayAccessToken(store.refreshToken);
+
+        const response = await fetch(
+          "https://api.ebay.com/sell/inventory/v1/inventory_item?limit=100",
+          {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${refreshedTokenData.access_token}`,
+              "Content-Type": "application/json",
+              "Accept-Language": "en-US"
+            }
+          }
+        );
+
+        const data = await response.json();
+
+        const items = data.inventoryItems || [];
+
+        await db.collection("inventorySnapshots").add({
+          storeId: doc.id,
+          storeName: store.username || "Unknown Store",
+          syncedAt: new Date(),
+          total: data.total || 0,
+          items
+        });
+
+        syncedStores += 1;
+        totalItems += data.total || 0;
+
+        syncHtml += `
+          <div class="order-card">
+            <h2>${store.username || "Unknown Store"}</h2>
+            <p><strong>Inventory Items Synced:</strong> ${data.total || 0}</p>
+            <p class="muted">Snapshot saved to Firebase.</p>
+          </div>
+        `;
+      } catch (storeError) {
+        console.error("Inventory sync store error:", storeError);
+
+        syncHtml += `
+          <div class="order-card">
+            <h2>${store.username || "Unknown Store"}</h2>
+            <p style="color:#dc2626;"><strong>Sync failed</strong></p>
+          </div>
+        `;
+      }
+    }
+
+    const content = `
+      <div class="topbar">
+        <div>
+          <h1>Inventory Sync</h1>
+          <div class="muted">Saved inventory snapshots from connected eBay stores.</div>
+        </div>
+        <a class="btn btn-dark" href="/dashboard?key=${req.query.key}">Back to Dashboard</a>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <div class="metric-label">Stores Synced</div>
+          <div class="metric-value">${syncedStores}</div>
+        </div>
+
+        <div class="card">
+          <div class="metric-label">Total Inventory Items</div>
+          <div class="metric-value">${totalItems}</div>
+        </div>
+      </div>
+
+      <div class="orders-list">
+        ${syncHtml || "<p>No stores synced.</p>"}
+      </div>
+    `;
+
+    res.send(shell({ title: "Inventory Sync", key: req.query.key, content }));
+  } catch (error) {
+    console.error("Inventory sync error:", error);
+    res.status(500).send("Failed to sync inventory.");
   }
 });
 
