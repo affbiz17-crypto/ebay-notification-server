@@ -2523,6 +2523,56 @@ app.get("/inventory-dashboard", requireLogin, async (req, res) => {
   }
 });
 
+app.get("/api/inventory-alerts", requireLogin, async (req, res) => {
+  try {
+    if (!db) return res.status(500).json({ error: "Database not connected." });
+
+    const snapshots = await db.collection("inventorySnapshots")
+      .orderBy("syncedAt", "desc")
+      .limit(10)
+      .get();
+
+    const lowStock = [];
+    const outOfStock = [];
+
+    snapshots.forEach(doc => {
+      const snap = doc.data();
+      const items = snap.items || [];
+
+      items.forEach(item => {
+        const qty = item.availability?.shipToLocationAvailability?.quantity ?? null;
+
+        const alertItem = {
+          storeName: snap.storeName || "Unknown Store",
+          sku: item.sku || "No SKU",
+          quantity: qty,
+          syncedAt: snap.syncedAt?.toDate
+            ? snap.syncedAt.toDate().toLocaleString()
+            : "Unknown"
+        };
+
+        if (qty === 0) {
+          outOfStock.push(alertItem);
+        }
+
+        if (qty !== null && qty > 0 && qty <= 3) {
+          lowStock.push(alertItem);
+        }
+      });
+    });
+
+    res.json({
+      lowStockCount: lowStock.length,
+      outOfStockCount: outOfStock.length,
+      lowStock,
+      outOfStock
+    });
+  } catch (error) {
+    console.error("Inventory alerts error:", error);
+    res.status(500).json({ error: "Failed to load inventory alerts." });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
