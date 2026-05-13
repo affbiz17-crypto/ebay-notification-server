@@ -660,7 +660,40 @@ app.get("/dashboard", requireLogin, async (req, res) => {
         }
       } catch (err) {
         console.error("Dashboard order count error:", err);
+      } 
+
+      try {
+  const inventoryResponse = await fetch(
+    "https://api.ebay.com/sell/inventory/v1/inventory_item?limit=100",
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${refreshedTokenData.access_token}`,
+        "Content-Type": "application/json",
+        "Accept-Language": "en-US"
       }
+    }
+  );
+
+  const inventoryData = await inventoryResponse.json();
+
+  if (inventoryData.inventoryItems) {
+    inventoryData.inventoryItems.forEach(item => {
+      const qty =
+        item.availability?.shipToLocationAvailability?.quantity ?? null;
+
+      if (qty === 0) {
+        outOfStockCount += 1;
+      }
+
+      if (qty !== null && qty > 0 && qty <= 3) {
+        lowStockCount += 1;
+      }
+    });
+  }
+} catch (inventoryError) {
+  console.error("Inventory dashboard count error:", inventoryError);
+}
 
       storeCards += `
         <div class="store-card">
@@ -718,7 +751,7 @@ app.get("/dashboard", requireLogin, async (req, res) => {
           <h1>Command Center</h1>
           <div class="muted">Live eBay operations, sales, orders, and store management.</div>
         </div>
-        <div class="muted">Auto-refreshes every 60 seconds</div>
+        <div class="muted">Auto-refreshes every 30 seconds</div>
       </div>
 
       <div class="grid">
@@ -726,7 +759,16 @@ app.get("/dashboard", requireLogin, async (req, res) => {
   <div class="card"><div class="metric-label">Awaiting Shipment</div><div id="awaitingShipment" class="metric-value">${totalAwaitingShipment}</div></div>
   <div class="card"><div class="metric-label">Today's Sales</div><div id="todaySales" class="metric-value">$${todaySales.toFixed(2)}</div></div>
   <div class="card"><div class="metric-label">7 Day Sales</div><div id="sevenDaySales" class="metric-value">$${sevenDaySales.toFixed(2)}</div></div>
-  <div class="card"><div class="metric-label">30 Day Sales</div><div id="thirtyDaySales" class="metric-value">$${thirtyDaySales.toFixed(2)}</div></div>
+  <div class="card"><div class="metric-label">30 Day Sales</div><div id="thirtyDaySales" class="metric-value">$${thirtyDaySales.toFixed(2)}</div></div> 
+  <div class="card">
+  <div class="metric-label">Low Stock Alerts</div>
+  <div class="metric-value">${lowStockCount}</div>
+</div>
+
+<div class="card">
+  <div class="metric-label">Out Of Stock</div>
+  <div class="metric-value">${outOfStockCount}</div>
+</div>
 </div>
 
 <p id="lastUpdated" class="muted">Live updates enabled</p>
@@ -1834,7 +1876,9 @@ app.get("/api/dashboard-stats", requireLogin, async (req, res) => {
     let totalAwaitingShipment = 0;
     let todaySales = 0;
     let sevenDaySales = 0;
-    let thirtyDaySales = 0;
+    let thirtyDaySales = 0; 
+    let lowStockCount = 0;
+    let outOfStockCount = 0;
 
     const now = new Date();
 
