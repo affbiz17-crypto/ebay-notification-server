@@ -588,7 +588,8 @@ app.get("/dashboard", requireLogin, async (req, res) => {
     let todaySales = 0;
     let sevenDaySales = 0;
     let thirtyDaySales = 0;
-
+    let lowStockCount = 0;
+    let outOfStockCount = 0;
     const now = new Date();
 
     const todayStart = new Date(now);
@@ -759,12 +760,9 @@ app.get("/dashboard", requireLogin, async (req, res) => {
         </div>
       </div>
 
-     <script>
-  const currentOrderCount = ${totalRecentOrders};
-  ...
-  localStorage.setItem("previousOrderCount", currentOrderCount); 
-  <script>
-async function refreshDashboardStats() {
+    <script>
+async function refreshDashboardStats() { 
+
   try {
     const response = await fetch("/api/dashboard-stats?key=${req.query.key}");
     const stats = await response.json();
@@ -793,7 +791,6 @@ async function refreshDashboardStats() {
 }
 
 setInterval(refreshDashboardStats, 30000);
-</script>
 </script>
 
 
