@@ -662,38 +662,7 @@ app.get("/dashboard", requireLogin, async (req, res) => {
         console.error("Dashboard order count error:", err);
       } 
 
-      try {
-  const inventoryResponse = await fetch(
-    "https://api.ebay.com/sell/inventory/v1/inventory_item?limit=100",
-    {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${refreshedTokenData.access_token}`,
-        "Content-Type": "application/json",
-        "Accept-Language": "en-US"
-      }
-    }
-  );
 
-  const inventoryData = await inventoryResponse.json();
-
-  if (inventoryData.inventoryItems) {
-    inventoryData.inventoryItems.forEach(item => {
-      const qty =
-        item.availability?.shipToLocationAvailability?.quantity ?? null;
-
-      if (qty === 0) {
-        outOfStockCount += 1;
-      }
-
-      if (qty !== null && qty > 0 && qty <= 3) {
-        lowStockCount += 1;
-      }
-    });
-  }
-} catch (inventoryError) {
-  console.error("Inventory dashboard count error:", inventoryError);
-}
 
       storeCards += `
         <div class="store-card">
