@@ -317,7 +317,8 @@ function shell({ title, key, content, metaRefresh = false }) {
               <a href="/profit-orders?key=${key || ''}">Profit Orders</a>
               <a href="/sync-inventory?key=${key || ''}">Sync Inventory</a> 
               <a href="/inventory-dashboard?key=${key || ''}">Inventory Dashboard</a>
-              <a href="/connect/ebay">Connect Store</a>
+              <a href="/connect/ebay">Connect Store</a> 
+              <a href="/analytics?key=${key || ''}">AI Analytics</a>
               <a href="/login">Login</a>
             </nav>
           </aside>
