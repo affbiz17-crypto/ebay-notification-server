@@ -2584,6 +2584,180 @@ app.get("/api/inventory-alerts", requireLogin, async (req, res) => {
   }
 });
 
+app.get("/analytics", requireLogin, async (req, res) => {
+  try {
+    if (!db) return res.send("Database not connected.");
+
+    const snapshot = await db.collection("ebayStores").get();
+
+    const storeStats = {};
+    const salesByDay = {};
+    let totalRevenue = 0;
+    let totalOrders = 0;
+
+    for (const doc of snapshot.docs) {
+      const store = doc.data();
+      const storeName = store.username || "Unknown Store";
+
+      storeStats[storeName] = {
+        orders: 0,
+        revenue: 0
+      };
+
+      const refreshedTokenData = await refreshEbayAccessToken(store.refreshToken);
+
+      const response = await fetch(
+        "https://api.ebay.com/sell/fulfillment/v1/order?limit=50",
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${refreshedTokenData.access_token}`,
+            "Content-Type": "application/json",
+            "Accept-Language": "en-US"
+          }
+        }
+      );
+
+      const data = await response.json();
+
+      if (!data.orders) continue;
+
+      data.orders.forEach(order => {
+        const revenue = Number(order.pricingSummary?.total?.value || 0);
+        const day = order.creationDate?.split("T")[0] || "Unknown";
+
+        totalOrders += 1;
+        totalRevenue += revenue;
+
+        storeStats[storeName].orders += 1;
+        storeStats[storeName].revenue += revenue;
+
+        if (!salesByDay[day]) {
+          salesByDay[day] = 0;
+        }
+
+        salesByDay[day] += revenue;
+      });
+    }
+
+    const averageOrderValue =
+      totalOrders > 0 ? totalRevenue / totalOrders : 0;
+
+    const bestStore = Object.entries(storeStats).sort(
+      (a, b) => b[1].revenue - a[1].revenue
+    )[0];
+
+    const bestDay = Object.entries(salesByDay).sort(
+      (a, b) => b[1] - a[1]
+    )[0];
+
+    let storeHtml = "";
+
+    Object.entries(storeStats)
+      .sort((a, b) => b[1].revenue - a[1].revenue)
+      .forEach(([storeName, stats]) => {
+        storeHtml += `
+          <div class="order-card">
+            <h2>${storeName}</h2>
+            <p><strong>Orders:</strong> ${stats.orders}</p>
+            <p><strong>Revenue:</strong> $${stats.revenue.toFixed(2)}</p>
+            <p><strong>Average Order:</strong> $${(stats.revenue / Math.max(stats.orders, 1)).toFixed(2)}</p>
+          </div>
+        `;
+      });
+
+    let salesChartHtml = "";
+    const maxSales = Math.max(...Object.values(salesByDay), 1);
+
+    Object.entries(salesByDay)
+      .sort((a, b) => new Date(a[0]) - new Date(b[0]))
+      .forEach(([day, amount]) => {
+        const width = (amount / maxSales) * 100;
+
+        salesChartHtml += `
+          <div class="chart-row">
+            <div class="chart-label">
+              <span>${day}</span>
+              <span>$${amount.toFixed(2)}</span>
+            </div>
+            <div class="track">
+              <div class="bar" style="width:${width}%">$${amount.toFixed(2)}</div>
+            </div>
+          </div>
+        `;
+      });
+
+    const simpleInsight =
+      totalOrders === 0
+        ? "No order data found yet."
+        : `Your strongest store by revenue is ${
+            bestStore?.[0] || "Unknown"
+          }. Your best sales day was ${
+            bestDay?.[0] || "Unknown"
+          } with $${(bestDay?.[1] || 0).toFixed(2)} in revenue.`;
+
+    const monthlyProjection = totalRevenue * 4;
+
+    const content = `
+      <div class="topbar">
+        <div>
+          <h1>AI Analytics</h1>
+          <div class="muted">Business intelligence, trends, and seller insights.</div>
+        </div>
+        <a class="btn btn-dark" href="/dashboard?key=${req.query.key}">Back to Dashboard</a>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <div class="metric-label">Orders Analyzed</div>
+          <div class="metric-value">${totalOrders}</div>
+        </div>
+
+        <div class="card">
+          <div class="metric-label">Revenue Analyzed</div>
+          <div class="metric-value">$${totalRevenue.toFixed(2)}</div>
+        </div>
+
+        <div class="card">
+          <div class="metric-label">Average Order Value</div>
+          <div class="metric-value">$${averageOrderValue.toFixed(2)}</div>
+        </div>
+
+        <div class="card">
+          <div class="metric-label">Projected Monthly Revenue</div>
+          <div class="metric-value">$${monthlyProjection.toFixed(2)}</div>
+        </div>
+      </div>
+
+      <div class="card section">
+        <h2>AI Summary</h2>
+        <p>${simpleInsight}</p>
+        <p class="muted">
+          Projection is based on recent order data multiplied forward.
+          This will become smarter as more history is stored.
+        </p>
+      </div>
+
+      <div class="card section">
+        <h2>Sales By Day</h2>
+        ${salesChartHtml || "<p>No sales data found.</p>"}
+      </div>
+
+      <div class="section">
+        <h2>Store Performance</h2>
+        <div class="store-grid">
+          ${storeHtml || "<p>No store data found.</p>"}
+        </div>
+      </div>
+    `;
+
+    res.send(shell({ title: "AI Analytics", key: req.query.key, content }));
+  } catch (error) {
+    console.error("Analytics error:", error);
+    res.status(500).send("Failed to load analytics.");
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
