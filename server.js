@@ -834,6 +834,27 @@ async function refreshLiveAlerts() {
     } else {
       box.style.display = "none";
     }
+if ("Notification" in window && Notification.permission === "granted") {
+  const previousAlertCount = Number(localStorage.getItem("previousAlertCount") || 0);
+
+  const currentAlertCount =
+    alerts.awaitingShipment +
+    alerts.highValueOrderCount +
+    alerts.lowStockCount +
+    alerts.outOfStockCount;
+
+  if (previousAlertCount > 0 && currentAlertCount > previousAlertCount) {
+    new Notification("SixJays Seller Alert", {
+      body: "New dashboard alert detected. Check your seller dashboard."
+    });
+
+    const audio = new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg");
+    audio.play().catch(() => {});
+  }
+
+  localStorage.setItem("previousAlertCount", currentAlertCount);
+}
+
 
   } catch (error) {
     console.error("Live alerts error:", error);
@@ -843,6 +864,17 @@ async function refreshLiveAlerts() {
 refreshLiveAlerts();
 
 setInterval(refreshLiveAlerts, 30000);
+</script>
+<script>
+async function requestNotificationPermission() {
+  if (!("Notification" in window)) return;
+
+  if (Notification.permission === "default") {
+    await Notification.requestPermission();
+  }
+}
+
+requestNotificationPermission();
 </script>
 
 `;
