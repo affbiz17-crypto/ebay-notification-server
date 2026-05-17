@@ -319,6 +319,7 @@ function shell({ title, key, content, metaRefresh = false }) {
               <a href="/inventory-dashboard?key=${key || ''}">Inventory Dashboard</a>
               <a href="/connect/ebay">Connect Store</a> 
               <a href="/analytics?key=${key || ''}">AI Analytics</a>
+              <a href="/slow-inventory?key=${key || ''}">Slow Inventory</a>
               <a href="/login">Login</a>
             </nav>
           </aside>
@@ -2938,6 +2939,133 @@ app.get("/api/live-alerts", requireLogin, async (req, res) => {
   } catch (error) {
     console.error("Live alerts error:", error);
     res.status(500).json({ error: "Failed to load live alerts." });
+  }
+});
+
+app.get("/slow-inventory", requireLogin, async (req, res) => {
+  try {
+    if (!db) return res.send("Database not connected.");
+
+    const inventorySnapshots = await db.collection("inventorySnapshots")
+      .orderBy("syncedAt", "desc")
+      .limit(10)
+      .get();
+
+    const storesSnapshot = await db.collection("ebayStores").get();
+
+    const soldTitles = new Set();
+    const soldSkus = new Set();
+
+    for (const doc of storesSnapshot.docs) {
+      const store = doc.data();
+      const refreshedTokenData = await refreshEbayAccessToken(store.refreshToken);
+
+      const response = await fetch(
+        "https://api.ebay.com/sell/fulfillment/v1/order?limit=50",
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${refreshedTokenData.access_token}`,
+            "Content-Type": "application/json",
+            "Accept-Language": "en-US"
+          }
+        }
+      );
+
+      const data = await response.json();
+
+      if (data.orders) {
+        data.orders.forEach(order => {
+          if (order.lineItems) {
+            order.lineItems.forEach(item => {
+              if (item.sku) soldSkus.add(item.sku.toUpperCase());
+              if (item.title) soldTitles.add(item.title.toUpperCase());
+            });
+          }
+        });
+      }
+    }
+
+    let slowHtml = "";
+    let slowCount = 0;
+    let checkedItems = 0;
+
+    inventorySnapshots.forEach(doc => {
+      const snap = doc.data();
+      const items = snap.items || [];
+
+      items.forEach(item => {
+        checkedItems += 1;
+
+        const sku = item.sku || "No SKU";
+        const skuKey = sku.toUpperCase();
+        const qty = item.availability?.shipToLocationAvailability?.quantity ?? null;
+
+        const hasSoldBySku = soldSkus.has(skuKey);
+        const hasSoldByTitle = Array.from(soldTitles).some(title =>
+          title.includes(skuKey)
+        );
+
+        const isSlow =
+          qty !== null &&
+          qty > 0 &&
+          !hasSoldBySku &&
+          !hasSoldByTitle;
+
+        if (isSlow) {
+          slowCount += 1;
+
+          slowHtml += `
+            <div class="order-card">
+              <h2>${sku}</h2>
+              <p class="muted"><strong>Store:</strong> ${snap.storeName || "Unknown Store"}</p>
+              <p><strong>Quantity On Hand:</strong> ${qty}</p>
+              <p><strong>Status:</strong> <span class="status-pill" style="background:#f59e0b;">Slow Mover</span></p>
+              <p class="muted">No recent sales match found from recent eBay order data.</p>
+            </div>
+          `;
+        }
+      });
+    });
+
+    const content = `
+      <div class="topbar">
+        <div>
+          <h1>Slow Inventory</h1>
+          <div class="muted">Detects inventory items with quantity on hand but no recent sales match.</div>
+        </div>
+        <a class="btn btn-dark" href="/inventory-dashboard?key=${req.query.key}">Back to Inventory Dashboard</a>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <div class="metric-label">Items Checked</div>
+          <div class="metric-value">${checkedItems}</div>
+        </div>
+
+        <div class="card">
+          <div class="metric-label">Slow Movers Found</div>
+          <div class="metric-value">${slowCount}</div>
+        </div>
+      </div>
+
+      <div class="card section">
+        <h2>How This Works</h2>
+        <p class="muted">
+          This compares synced inventory SKUs against recent order line items.
+          If an item has stock but no recent sale match, it gets flagged as a slow mover.
+        </p>
+      </div>
+
+      <div class="orders-list">
+        ${slowHtml || "<p>No slow-moving inventory detected from current snapshot data.</p>"}
+      </div>
+    `;
+
+    res.send(shell({ title: "Slow Inventory", key: req.query.key, content }));
+  } catch (error) {
+    console.error("Slow inventory error:", error);
+    res.status(500).send("Failed to load slow inventory.");
   }
 });
 
