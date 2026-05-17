@@ -319,7 +319,8 @@ function shell({ title, key, content, metaRefresh = false }) {
               <a href="/inventory-dashboard?key=${key || ''}">Inventory Dashboard</a>
               <a href="/connect/ebay">Connect Store</a> 
               <a href="/analytics?key=${key || ''}">AI Analytics</a>
-              <a href="/slow-inventory?key=${key || ''}">Slow Inventory</a>
+              <a href="/slow-inventory?key=${key || ''}">Slow Inventory</a> 
+              <a href="/reorder-suggestions?key=${key || ''}">Reorder Suggestions</a>
               <a href="/login">Login</a>
             </nav>
           </aside>
@@ -3066,6 +3067,183 @@ app.get("/slow-inventory", requireLogin, async (req, res) => {
   } catch (error) {
     console.error("Slow inventory error:", error);
     res.status(500).send("Failed to load slow inventory.");
+  }
+});
+
+app.get("/reorder-suggestions", requireLogin, async (req, res) => {
+  try {
+    if (!db) return res.send("Database not connected.");
+
+    const inventorySnapshots = await db.collection("inventorySnapshots")
+      .orderBy("syncedAt", "desc")
+      .limit(10)
+      .get();
+
+    const storesSnapshot = await db.collection("ebayStores").get();
+
+    const salesMap = {};
+
+    for (const doc of storesSnapshot.docs) {
+      const store = doc.data();
+
+      const refreshedTokenData = await refreshEbayAccessToken(store.refreshToken);
+
+      const response = await fetch(
+        "https://api.ebay.com/sell/fulfillment/v1/order?limit=50",
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${refreshedTokenData.access_token}`,
+            "Content-Type": "application/json",
+            "Accept-Language": "en-US"
+          }
+        }
+      );
+
+      const data = await response.json();
+
+      if (data.orders) {
+        data.orders.forEach(order => {
+          if (order.lineItems) {
+            order.lineItems.forEach(item => {
+              const sku = (item.sku || item.title || "UNKNOWN")
+                .toUpperCase()
+                .trim();
+
+              if (!salesMap[sku]) {
+                salesMap[sku] = 0;
+              }
+
+              salesMap[sku] += Number(item.quantity || 1);
+            });
+          }
+        });
+      }
+    }
+
+    let reorderHtml = "";
+    let reorderCount = 0;
+
+    inventorySnapshots.forEach(doc => {
+      const snap = doc.data();
+      const items = snap.items || [];
+
+      items.forEach(item => {
+        const sku = (item.sku || "UNKNOWN").toUpperCase().trim();
+
+        const qty =
+          item.availability?.shipToLocationAvailability?.quantity ?? 0;
+
+        const recentSales = salesMap[sku] || 0;
+
+        const shouldReorder =
+          qty <= 3 &&
+          recentSales >= 2;
+
+        if (shouldReorder) {
+          reorderCount += 1;
+
+          const urgency =
+            qty === 0
+              ? "#dc2626"
+              : qty <= 1
+              ? "#f59e0b"
+              : "#2563eb";
+
+          reorderHtml += `
+            <div class="order-card">
+              <h2>${sku}</h2>
+
+              <p class="muted">
+                <strong>Store:</strong>
+                ${snap.storeName || "Unknown Store"}
+              </p>
+
+              <p>
+                <strong>Quantity Remaining:</strong>
+                ${qty}
+              </p>
+
+              <p>
+                <strong>Recent Units Sold:</strong>
+                ${recentSales}
+              </p>
+
+              <p>
+                <span class="status-pill" style="background:${urgency};">
+                  Reorder Recommended
+                </span>
+              </p>
+
+              <p class="muted">
+                AI detected low inventory with active sales velocity.
+              </p>
+            </div>
+          `;
+        }
+      });
+    });
+
+    const content = `
+      <div class="topbar">
+        <div>
+          <h1>Reorder Suggestions</h1>
+          <div class="muted">
+            AI-powered low stock + recent sales analysis.
+          </div>
+        </div>
+
+        <a class="btn btn-dark"
+           href="/inventory-dashboard?key=${req.query.key}">
+           Back to Inventory
+        </a>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <div class="metric-label">
+            Reorder Candidates
+          </div>
+
+          <div class="metric-value">
+            ${reorderCount}
+          </div>
+        </div>
+      </div>
+
+      <div class="card section">
+        <h2>AI Reorder Logic</h2>
+
+        <p class="muted">
+          Items are flagged when:
+        </p>
+
+        <ul>
+          <li>Inventory quantity is low</li>
+          <li>Recent order activity exists</li>
+          <li>Sales velocity suggests future demand</li>
+        </ul>
+      </div>
+
+      <div class="orders-list">
+        ${
+          reorderHtml ||
+          "<p>No reorder suggestions detected.</p>"
+        }
+      </div>
+    `;
+
+    res.send(
+      shell({
+        title: "Reorder Suggestions",
+        key: req.query.key,
+        content
+      })
+    );
+
+  } catch (error) {
+    console.error("Reorder suggestions error:", error);
+    res.status(500).send("Failed to load reorder suggestions.");
   }
 });
 
