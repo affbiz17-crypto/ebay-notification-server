@@ -321,6 +321,7 @@ function shell({ title, key, content, metaRefresh = false }) {
               <a href="/analytics?key=${key || ''}">AI Analytics</a>
               <a href="/slow-inventory?key=${key || ''}">Slow Inventory</a> 
               <a href="/reorder-suggestions?key=${key || ''}">Reorder Suggestions</a>
+              <a href="/assistant?key=${key || ''}">AI Assistant</a>
               <a href="/login">Login</a>
             </nav>
           </aside>
@@ -3244,6 +3245,176 @@ app.get("/reorder-suggestions", requireLogin, async (req, res) => {
   } catch (error) {
     console.error("Reorder suggestions error:", error);
     res.status(500).send("Failed to load reorder suggestions.");
+  }
+});
+
+app.get("/assistant", requireLogin, async (req, res) => {
+  try {
+    if (!db) return res.send("Database not connected.");
+
+    const storesSnapshot = await db.collection("ebayStores").get();
+
+    let totalOrders = 0;
+    let totalRevenue = 0;
+    let awaitingShipment = 0;
+    let storeStats = [];
+
+    for (const doc of storesSnapshot.docs) {
+      const store = doc.data();
+      const storeName = store.username || "Unknown Store";
+      let storeOrders = 0;
+      let storeRevenue = 0;
+
+      const refreshedTokenData = await refreshEbayAccessToken(store.refreshToken);
+
+      const response = await fetch(
+        "https://api.ebay.com/sell/fulfillment/v1/order?limit=50",
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${refreshedTokenData.access_token}`,
+            "Content-Type": "application/json",
+            "Accept-Language": "en-US"
+          }
+        }
+      );
+
+      const data = await response.json();
+
+      if (data.orders) {
+        data.orders.forEach(order => {
+          const total = Number(order.pricingSummary?.total?.value || 0);
+
+          totalOrders += 1;
+          totalRevenue += total;
+          storeOrders += 1;
+          storeRevenue += total;
+
+          if (order.orderFulfillmentStatus === "NOT_STARTED") {
+            awaitingShipment += 1;
+          }
+        });
+      }
+
+      storeStats.push({
+        storeName,
+        orders: storeOrders,
+        revenue: storeRevenue
+      });
+    }
+
+    storeStats.sort((a, b) => b.revenue - a.revenue);
+
+    const bestStore = storeStats[0];
+
+    const inventorySnapshots = await db.collection("inventorySnapshots")
+      .orderBy("syncedAt", "desc")
+      .limit(10)
+      .get();
+
+    let lowStockCount = 0;
+    let outOfStockCount = 0;
+
+    inventorySnapshots.forEach(doc => {
+      const snap = doc.data();
+      const items = snap.items || [];
+
+      items.forEach(item => {
+        const qty = item.availability?.shipToLocationAvailability?.quantity ?? null;
+
+        if (qty === 0) outOfStockCount += 1;
+        if (qty !== null && qty > 0 && qty <= 3) lowStockCount += 1;
+      });
+    });
+
+    const averageOrder =
+      totalOrders > 0 ? totalRevenue / totalOrders : 0;
+
+    const assistantSummary = `
+      Based on current connected store data, you have ${totalOrders} recent orders
+      and $${totalRevenue.toFixed(2)} in analyzed revenue. Your average order value is
+      $${averageOrder.toFixed(2)}. You currently have ${awaitingShipment} orders awaiting shipment.
+      ${
+        bestStore
+          ? `Your strongest store by revenue is ${bestStore.storeName} with $${bestStore.revenue.toFixed(2)}.`
+          : "No strongest store could be identified yet."
+      }
+      Inventory alerts show ${lowStockCount} low-stock items and ${outOfStockCount} out-of-stock items.
+    `;
+
+    const recommendation =
+      awaitingShipment > 0
+        ? "Priority: handle awaiting shipment orders first, then review low-stock inventory and reorder candidates."
+        : lowStockCount > 0 || outOfStockCount > 0
+        ? "Priority: review inventory alerts and reorder suggestions."
+        : "Priority: review profit orders and slow inventory to improve margins.";
+
+    const content = `
+      <div class="topbar">
+        <div>
+          <h1>AI Assistant</h1>
+          <div class="muted">Operational business copilot powered by your live store data.</div>
+        </div>
+
+        <a class="btn btn-dark" href="/dashboard?key=${req.query.key}">
+          Back to Dashboard
+        </a>
+      </div>
+
+      <div class="card section">
+        <h2>Executive Summary</h2>
+        <p>${assistantSummary}</p>
+      </div>
+
+      <div class="card section">
+        <h2>Recommended Next Action</h2>
+        <p>${recommendation}</p>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <div class="metric-label">Recent Orders</div>
+          <div class="metric-value">${totalOrders}</div>
+        </div>
+
+        <div class="card">
+          <div class="metric-label">Revenue Analyzed</div>
+          <div class="metric-value">$${totalRevenue.toFixed(2)}</div>
+        </div>
+
+        <div class="card">
+          <div class="metric-label">Awaiting Shipment</div>
+          <div class="metric-value">${awaitingShipment}</div>
+        </div>
+
+        <div class="card">
+          <div class="metric-label">Low Stock</div>
+          <div class="metric-value">${lowStockCount}</div>
+        </div>
+
+        <div class="card">
+          <div class="metric-label">Out Of Stock</div>
+          <div class="metric-value">${outOfStockCount}</div>
+        </div>
+      </div>
+
+      <div class="card section">
+        <h2>Suggested Questions</h2>
+        <p class="muted">These will become interactive in the next version:</p>
+        <ul>
+          <li>Which store is performing best?</li>
+          <li>What inventory should I reorder?</li>
+          <li>Which products are moving slowly?</li>
+          <li>What should I focus on today?</li>
+          <li>Which area has the biggest business risk?</li>
+        </ul>
+      </div>
+    `;
+
+    res.send(shell({ title: "AI Assistant", key: req.query.key, content }));
+  } catch (error) {
+    console.error("AI assistant error:", error);
+    res.status(500).send("Failed to load AI assistant.");
   }
 });
 
