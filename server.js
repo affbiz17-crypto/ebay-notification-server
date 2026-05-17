@@ -697,6 +697,10 @@ app.get("/dashboard", requireLogin, async (req, res) => {
 
     const content = `
       <div class="topbar"> 
+      <div id="liveAlerts" class="card" style="display:none; border-color:#f59e0b; margin-bottom:20px;">
+  <h2>Live Alerts</h2>
+  <div id="liveAlertsContent"></div>
+</div>
 <form method="GET" action="/all-orders" class="card" style="margin-bottom:20px;">
   <input type="hidden" name="key" value="${req.query.key}">
 
@@ -724,7 +728,10 @@ app.get("/dashboard", requireLogin, async (req, res) => {
         </div>
         <div class="muted">Auto-refreshes every 30 seconds</div>
       </div>
-
+<div id="liveAlerts" class="card" style="display:none; border-color:#f59e0b; margin-bottom:20px;">
+  <h2>Live Alerts</h2>
+  <div id="liveAlertsContent"></div>
+</div>
       <div class="grid">
   <div class="card"><div class="metric-label">Total Recent Orders</div><div id="totalOrders" class="metric-value">${totalRecentOrders}</div></div>
   <div class="card"><div class="metric-label">Awaiting Shipment</div><div id="awaitingShipment" class="metric-value">${totalAwaitingShipment}</div></div>
@@ -791,9 +798,52 @@ async function refreshDashboardStats() {
   }
 }
 
-setInterval(refreshDashboardStats, 30000);
-</script>
+setInterval(refreshDashboardStats, 30000); 
 
+</script>
+<script>
+async function refreshLiveAlerts() {
+  try {
+    const response = await fetch("/api/live-alerts?key=${req.query.key}");
+    const alerts = await response.json();
+
+    const box = document.getElementById("liveAlerts");
+    const content = document.getElementById("liveAlertsContent");
+
+    let html = "";
+
+    if (alerts.awaitingShipment > 0) {
+      html += "<p>📦 " + alerts.awaitingShipment + " orders awaiting shipment.</p>";
+    }
+
+    if (alerts.highValueOrderCount > 0) {
+      html += "<p>💰 " + alerts.highValueOrderCount + " high-value orders found.</p>";
+    }
+
+    if (alerts.lowStockCount > 0) {
+      html += "<p>⚠️ " + alerts.lowStockCount + " low stock items.</p>";
+    }
+
+    if (alerts.outOfStockCount > 0) {
+      html += "<p>❌ " + alerts.outOfStockCount + " out-of-stock items.</p>";
+    }
+
+    if (html) {
+      content.innerHTML = html;
+      box.style.display = "block";
+    } else {
+      box.style.display = "none";
+    }
+
+  } catch (error) {
+    console.error("Live alerts error:", error);
+  }
+}
+
+refreshLiveAlerts();
+
+setInterval(refreshLiveAlerts, 30000);
+</script>
 
 `;
 
