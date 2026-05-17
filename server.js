@@ -1,7 +1,6 @@
 import express from "express";
 import dotenv from "dotenv";
 import admin from "firebase-admin";
-import webpush from "web-push";
 
 dotenv.config();
 
@@ -3422,11 +3421,6 @@ app.get("/assistant", requireLogin, async (req, res) => {
 app.get("/generate-vapid-keys", requireLogin, (req, res) => {
   const keys = webpush.generateVAPIDKeys();
 
-  res.json({
-    VAPID_PUBLIC_KEY: keys.publicKey,
-    VAPID_PRIVATE_KEY: keys.privateKey,
-    VAPID_EMAIL: "mailto:youremail@example.com"
-  });
 });
 
 app.listen(PORT, () => {
