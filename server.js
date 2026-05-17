@@ -2758,6 +2758,107 @@ app.get("/analytics", requireLogin, async (req, res) => {
   }
 });
 
+app.get("/api/live-alerts", requireLogin, async (req, res) => {
+  try {
+    if (!db) return res.status(500).json({ error: "Database not connected." });
+
+    const storesSnapshot = await db.collection("ebayStores").get();
+
+    let awaitingShipment = 0;
+    let highValueOrders = [];
+    let recentOrders = 0;
+
+    for (const doc of storesSnapshot.docs) {
+      const store = doc.data();
+      const refreshedTokenData = await refreshEbayAccessToken(store.refreshToken);
+
+      const response = await fetch(
+        "https://api.ebay.com/sell/fulfillment/v1/order?limit=50",
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${refreshedTokenData.access_token}`,
+            "Content-Type": "application/json",
+            "Accept-Language": "en-US"
+          }
+        }
+      );
+
+      const data = await response.json();
+
+      if (data.orders) {
+        data.orders.forEach(order => {
+          const total = Number(order.pricingSummary?.total?.value || 0);
+
+          recentOrders += 1;
+
+          if (order.orderFulfillmentStatus === "NOT_STARTED") {
+            awaitingShipment += 1;
+          }
+
+          if (total >= 100) {
+            highValueOrders.push({
+              storeName: store.username || "Unknown Store",
+              orderId: order.orderId,
+              buyer: order.buyer?.username || "Unknown",
+              total: total.toFixed(2),
+              status: order.orderFulfillmentStatus
+            });
+          }
+        });
+      }
+    }
+
+    const inventorySnapshots = await db.collection("inventorySnapshots")
+      .orderBy("syncedAt", "desc")
+      .limit(10)
+      .get();
+
+    let lowStock = [];
+    let outOfStock = [];
+
+    inventorySnapshots.forEach(doc => {
+      const snap = doc.data();
+      const items = snap.items || [];
+
+      items.forEach(item => {
+        const qty = item.availability?.shipToLocationAvailability?.quantity ?? null;
+
+        if (qty === 0) {
+          outOfStock.push({
+            storeName: snap.storeName || "Unknown Store",
+            sku: item.sku || "No SKU",
+            quantity: qty
+          });
+        }
+
+        if (qty !== null && qty > 0 && qty <= 3) {
+          lowStock.push({
+            storeName: snap.storeName || "Unknown Store",
+            sku: item.sku || "No SKU",
+            quantity: qty
+          });
+        }
+      });
+    });
+
+    res.json({
+      recentOrders,
+      awaitingShipment,
+      highValueOrderCount: highValueOrders.length,
+      highValueOrders,
+      lowStockCount: lowStock.length,
+      outOfStockCount: outOfStock.length,
+      lowStock,
+      outOfStock,
+      updatedAt: new Date().toLocaleTimeString()
+    });
+  } catch (error) {
+    console.error("Live alerts error:", error);
+    res.status(500).json({ error: "Failed to load live alerts." });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
