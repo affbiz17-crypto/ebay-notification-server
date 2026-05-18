@@ -3534,6 +3534,38 @@ app.get("/api/push/test", requireLogin, async (req, res) => {
     console.error("Push test error:", error);
     res.status(500).json({ error: "Failed to send test push." });
   }
+}); 
+
+app.get("/api/push/clear", requireLogin, async (req, res) => {
+  try {
+    if (!db) {
+      return res.status(500).json({
+        error: "Database not connected."
+      });
+    }
+
+    const snapshot = await db.collection("pushSubscriptions").get();
+
+    const deletions = [];
+
+    snapshot.forEach(doc => {
+      deletions.push(doc.ref.delete());
+    });
+
+    await Promise.all(deletions);
+
+    res.json({
+      success: true,
+      deleted: deletions.length
+    });
+
+  } catch (error) {
+    console.error("Clear push subscriptions error:", error);
+
+    res.status(500).json({
+      error: "Failed to clear subscriptions."
+    });
+  }
 });
 
 app.listen(PORT, () => {
