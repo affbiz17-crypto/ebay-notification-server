@@ -886,7 +886,58 @@ async function requestNotificationPermission() {
 
 requestNotificationPermission();
 </script>
+<script>
+async function refreshLiveAlerts() {
+...
+}
+</script>
 
+<script>
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding)
+    .replace(/-/g, "+")
+    .replace(/_/g, "/");
+
+  const rawData = window.atob(base64);
+
+  return Uint8Array.from(
+    [...rawData].map(char => char.charCodeAt(0))
+  );
+}
+
+async function subscribeToPush() {
+  if (!("serviceWorker" in navigator)) return;
+  if (!("PushManager" in window)) return;
+
+  const permission = await Notification.requestPermission();
+
+  if (permission !== "granted") return;
+
+  const registration = await navigator.serviceWorker.ready;
+
+  const keyResponse = await fetch("/api/push/public-key?key=${req.query.key}");
+  const keyData = await keyResponse.json();
+
+  const subscription = await registration.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(keyData.publicKey)
+  });
+
+  await fetch("/api/push/subscribe?key=${req.query.key}", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(subscription)
+  });
+
+  console.log("Push subscription saved.");
+}
+
+subscribeToPush();
+</script>
+`;
 `;
 
     res.send(shell({ title: "eBay Store Dashboard", key: req.query.key, content, metaRefresh: true }));
