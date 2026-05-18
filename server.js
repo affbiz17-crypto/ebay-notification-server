@@ -1,6 +1,7 @@
 import express from "express";
 import dotenv from "dotenv";
 import admin from "firebase-admin";
+import webpush from "web-push";
 
 dotenv.config();
 
@@ -27,6 +28,12 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT) {
 } else {
   console.log("Firebase not configured yet.");
 }
+
+webpush.setVapidDetails(
+  process.env.VAPID_EMAIL,
+  process.env.VAPID_PUBLIC_KEY,
+  process.env.VAPID_PRIVATE_KEY
+);
 
 const baseStyles = `
   <style>
@@ -3421,6 +3428,66 @@ app.get("/assistant", requireLogin, async (req, res) => {
 app.get("/generate-vapid-keys", requireLogin, (req, res) => {
   const keys = webpush.generateVAPIDKeys();
 
+}); 
+
+app.get("/api/push/public-key", requireLogin, (req, res) => {
+  res.json({
+    publicKey: process.env.VAPID_PUBLIC_KEY
+  });
+});
+
+app.post("/api/push/subscribe", requireLogin, async (req, res) => {
+  try {
+    if (!db) return res.status(500).json({ error: "Database not connected." });
+
+    const subscription = req.body;
+
+    await db.collection("pushSubscriptions").add({
+      subscription,
+      createdAt: new Date()
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Push subscribe error:", error);
+    res.status(500).json({ error: "Failed to save push subscription." });
+  }
+});
+
+app.get("/api/push/test", requireLogin, async (req, res) => {
+  try {
+    if (!db) return res.status(500).json({ error: "Database not connected." });
+
+    const snapshot = await db.collection("pushSubscriptions").get();
+
+    const payload = JSON.stringify({
+      title: "SixJays Seller Alert",
+      body: "Test push notification is working."
+    });
+
+    const results = [];
+
+    for (const doc of snapshot.docs) {
+      const data = doc.data();
+
+      try {
+        await webpush.sendNotification(data.subscription, payload);
+        results.push({ id: doc.id, success: true });
+      } catch (error) {
+        console.error("Push send error:", error);
+        results.push({ id: doc.id, success: false });
+      }
+    }
+
+    res.json({
+      sent: results.filter(r => r.success).length,
+      failed: results.filter(r => !r.success).length,
+      results
+    });
+  } catch (error) {
+    console.error("Push test error:", error);
+    res.status(500).json({ error: "Failed to send test push." });
+  }
 });
 
 app.listen(PORT, () => {
