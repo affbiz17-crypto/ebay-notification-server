@@ -886,11 +886,7 @@ async function requestNotificationPermission() {
 
 requestNotificationPermission();
 </script>
-<script>
-async function refreshLiveAlerts() {
-...
-}
-</script>
+
 
 <script>
 function urlBase64ToUint8Array(base64String) {
@@ -937,7 +933,6 @@ async function subscribeToPush() {
 
 subscribeToPush();
 </script>
-`;
 `;
 
     res.send(shell({ title: "eBay Store Dashboard", key: req.query.key, content, metaRefresh: true }));
