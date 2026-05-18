@@ -336,14 +336,14 @@ function shell({ title, key, content, metaRefresh = false }) {
             ${content}
           </main>
         </div> 
-        <script>
+       
     <script>
-      if ("serviceWorker" in navigator) {
+  if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("/service-worker.js")
       .then(() => console.log("Service worker registered"))
       .catch(error => console.log("Service worker failed:", error));
-      }
-  </script>
+  }
+</script>
            </body>
     </html>
   `;
@@ -709,7 +709,7 @@ app.get("/dashboard", requireLogin, async (req, res) => {
       <div class="topbar"> 
       <div id="liveAlerts" class="card" style="display:none; border-color:#f59e0b; margin-bottom:20px;">
   <h2>Live Alerts</h2>
-  <div id="liveAlertsContent"></div>
+ 
 </div>
 <form method="GET" action="/all-orders" class="card" style="margin-bottom:20px;">
   <input type="hidden" name="key" value="${req.query.key}">
